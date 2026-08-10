@@ -1,0 +1,117 @@
+[[import-export-internals]]
+== Import / Export Internals
+
+All import and export logic lives in `src/modules/import_export.py`.
+The public entry points are methods on `ImportExportManager`, which holds a reference to `MainWindow` via `self._parent`.
+
+=== Import (`run_import`)
+
+`run_import()` first checks `PackManager.is_dirty`; if the pack has unsaved changes the user is prompted to confirm before proceeding.
+If the pack is clean (or the user confirms), the folder picker opens.
+Once a valid folder with `.ini` files is found, `pm.new_pack()` + `MainWindow._refresh_all()` are called immediately to clear all views before parsing begins.
+If the folder dialog is canceled, or no ini files are found, the current pack is left untouched.
+
+==== ini resolution (`_resolve_ini_paths`)
+
+* If `pack.ini` exists it is always first.
+* All other `.ini` files in the folder are appended, sorted alphabetically.
+* This ensures multi-part packs (`mypack1.ini`, `mypack2.ini`, …) are processed in order.
+
+==== Single-ini import (`_read_pack_ini`)
+
+Reads one ini file and returns a plain `dict`.  Key fields populated:
+
+[cols="1,3"]
+|===
+| Key | Source
+
+| `game` | `gameID` / `plugID` in `[Mod]` / `[Pack]`; `"snapshot"` or `"lewdshores"`
+| `id`, `id_range`, `title` | `[Mod]` / `[Pack]` identity fields
+| `pack_type` | `"events"` if `type=events` in `[Mod]`; `"lovelens"` if `[Hypnosis]` section present; otherwise `"photos"`
+| `defaults_position` … | `[Defaults]` values read as structured fields, not passthrough
+| `photos` | List of dicts — one per name in `[Photos] names=`
+| `special_types`, `special_colors` | `[Special Traits]` / `[Create your own traits]` entries
+| `events` | `[Events]` — backgrounds, overlays, dialog JSON content
+| `love_lens` | `[Hypnosis]` identity fields
+| `passthrough_sections` | Unknown sections stored verbatim for lossless re-export
+|===
+
+Per-photo dict keys: `name`, `source` (absolute path or `None`), `position`, `type`, `color`, `hypnoType`, `hypnosisType`, `sequenceType`, `photoPosition`, `special`, `specialType`, `_type_key`.
+
+The `_type_key` field is set to `"newType"` when the source ini used `photoname.newType=` (Lewd Shores new-format packs) instead of `photoname.type=`.
+Export restores the original key name from this field, so roundtrips are lossless.
+
+==== Multi-ini merge
+
+After reading all parts, `run_import` merges them:
+
+* `photos` lists are concatenated.
+* `special_types` / `special_colors` are union-merged (deduplication by exact string).
+* **Per-part trait lists are captured before merging** and stored as `special_types_parts` / `special_colors_parts` (list of lists, one inner list per ini file).
+  This allows export to write each part's traits back to the correct exported ini rather than duplicating the full merged set everywhere.
+* `id` has trailing digits stripped (`"mypack1"` → `"mypack"`).
+* `title` has `" Part N"` suffix stripped.
+
+=== Export (`run_export`)
+
+`run_export()` validates dialog scenes via `validate_events()`, then writes the pack to a chosen parent folder.
+
+==== Folder naming
+
+`{GamePrefix}_{FolderKind}_{pack_id}`
+
+* `GamePrefix`: `Snapshot` or `LewdShores`
+* `FolderKind`: `EventPack` (when `pack_type == "events"`) or `BonusPack`
+
+==== ini splitting (`_write_pack_ini`)
+
+Photos are chunked at 100 per file.  Each chunk produces a separate ini file (`pack.ini` for single-part, `{id}1.ini` / `{id}2.ini` … for multi-part).
+
+For each part:
+
+* `id` and `title` get a part-number suffix appended (`mypack1`, `"My Pack Part 1"`).
+* `idrange` is incremented by 100 per part.
+* `[Special Traits]` / `[Create your own traits]` entries come from `special_types_parts[part_idx]` when that list exists, falling back to the flat `special_types` list for packs created from scratch in the UI.
+
+Key name differences between games:
+
+[cols="1,1,1"]
+|===
+| Field | Snapshot! | Lewd Shores
+
+| Header section | `[Mod]` | `[Pack]`
+| Game identifier | `plugID=snapshot` | `gameID=lewdshores`
+| Trait section | `[Special Traits]` | `[Create your own traits]`
+| Trait type key | `specialType=` | `newType=`
+| Trait color key | `specialColor=` | `newSpecial=`
+| Per-photo type | `photo.type=` | `photo.type=` (or `photo.newType=` if `_type_key` set)
+|===
+
+==== File export (`_export_photo_files`)
+
+* Copies photo source files to `Data/`, preserving the original file extension.
+* Copies overlay / texture source files using `os.path.basename(src)`.
+* Copies event dialog JSON files to `Data/`.
+* Copies **orphaned files** — files present in `source_folder/Data/` that are not referenced by any photo, event, overlay, texture, or JSON string — using `_collect_referenced()` / `_collect_disk_assets()` from `orphaned_files.py`.
+  This requires `data["source_folder"]` to be set (done by `run_import`; must be set manually in scripts).
+
+==== Export-time validation
+
+`validate_events(events)` is called before writing any files.
+
+* *Errors* (block export): invalid JSON content, out-of-range flow references.
+* *Warnings* (prompt with checkbox): last dialog node has no `endEvent` command.
+  If the user checks *Add endEvent to affected scenes automatically*, `_inject_end_events(pack_data, scene_names)` appends `{"key": "endEvent", "val": ""}` to the last node's `vars` list and calls `EventWidget.refresh()` to update the live editor.
+
+=== Data keys reference
+
+The following keys in `pm.data` are owned by `import_export.py`:
+
+[cols="1,1,3"]
+|===
+| Key | Type | Notes
+
+| `source_folder` | `str` | Absolute path of the imported pack folder; used by orphaned-files tab and export
+| `special_types_parts` | `list[list[str]]` | Per-part trait lists; only present after multi-ini import
+| `special_colors_parts` | `list[list[str]]` | Per-part color lists; only present after multi-ini import
+|===

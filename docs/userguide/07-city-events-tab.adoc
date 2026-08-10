@@ -1,0 +1,95 @@
+== City Events Tab
+
+NOTE: This tab is only visible when the game is set to *Snapshot!* on the Pack Info tab.
+
+The tab is divided into three sub-tabs: *Backgrounds*, *Overlays*, and *Dialogs*.
+At the top of the tab, choose the *Event Type* — `normal` (default) or `explosion`.
+
+=== Backgrounds
+
+Click *Add…* to open a file picker and choose one or more background image files.
+Supported formats: `.png`, `.jpg`, `.jpeg`, `.dat`, `.jpa`, `.pna`, `.bytes`.
+
+The selected image is previewed on the right side of the panel.
+Use *▲* / *▼* to reorder backgrounds and *Remove* to delete the selected entry.
+
+=== Overlays
+
+Works identically to Backgrounds — same toolbar, list, and live preview pane.
+Overlay images are layered over the background during the event in-game.
+
+=== Dialogs
+
+The Dialogs sub-tab has three vertical panels separated by resizable splitters.
+
+==== Scene List (left panel)
+
+Click *Add Scene…* to import one or more `.json` dialog files.
+Each file becomes a named dialog scene in the list.
+Click *Remove* to delete the selected scene.
+
+==== Node List (middle panel)
+
+Displays the dialog nodes of the selected scene.
+Each node shows its index, speaker tag (if any), and a text preview.
+
+Toolbar buttons:
+
+[cols="1,4"]
+|===
+| Button | Action
+
+| *Add Node*
+| Appends a blank node at the end of the scene.
+
+| *Remove*
+| Deletes the selected node. Flow references pointing to it are reset to -1; references above it are decremented automatically.
+
+| *▲* / *▼*
+| Moves the selected node up or down. All `Next Node`, `Branch To`, and `Action Node` references in the scene are remapped automatically.
+|===
+
+==== Node Form (right panel)
+
+Shows and edits the properties of the selected node.
+
+[cols="1,4"]
+|===
+| Field | Description
+
+| *Speaker*
+| Who speaks this line. Common values (`Aya`, `You`, `SKIP`, …) are available in the dropdown; you can also type any custom value. Leave blank for narration or system lines.
+
+| *Text*
+| The dialogue line shown in-game.
+
+| *Extra Data*
+| Advanced field read by the game engine. Leave empty unless specifically required; it is empty in all known bonus packs.
+
+| *Next Node*
+| Index of the node to advance to after this one (`-1` = end of chain).
+
+| *Branch To*
+| Index of a player-choice set node (`-1` = none).
+
+| *Action Node*
+| Index of an action node to trigger in parallel (`-1` = none).
+
+| *Commands table*
+| Zero or more commands executed when this node plays. Click the *Command* or *Argument* cell to open a dropdown. Use *Add* / *Remove* to manage rows.
+
+| *Browse…*
+| Enabled when the selected command uses an image argument (`showImage`, `showEventPhoto`, `mod_overlayImage3`, `mod_addEventSellablePhoto`). Opens a file picker; the asset stem name is inserted automatically, and a preview is shown below the table.
+|===
+
+=== Export Validation
+
+When exporting, the application checks all dialog scenes for issues:
+
+* *Error* (blocks export): a flow reference (`Next Node`, `Branch To`, or `Action Node`) points to a node index that does not exist, or a scene contains invalid JSON.
+* *Warning* (prompts to continue): the last node in a scene has no `endEvent` command, which means the event will not close automatically in-game.
++
+The warning dialog includes an *Add endEvent to affected scenes automatically* checkbox.
+Checking it before clicking *Yes* appends an `endEvent` command to the last node of every flagged scene in-memory before writing the export, and refreshes the City Events editor so the change is immediately visible.
+
+TIP: Double-click any background, overlay, or command image preview to open a full-resolution viewer where you can zoom in/out and open the file in the system default editor.

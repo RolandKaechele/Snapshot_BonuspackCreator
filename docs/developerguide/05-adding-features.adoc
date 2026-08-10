@@ -1,0 +1,182 @@
+== Adding a New Feature Tab
+
+. Create `src/modules/my_feature.py` with a class inheriting `QWidget`.
+. The class must implement `refresh(self) -> None` to re-read from `PackManager`.
+. In `ui/main_window.py`:
+  .. Import the new class.
+  .. Instantiate it with `self._pm` in `_build_ui()`.
+  .. `addTab` it to `self._tabs`.
+  .. Call `.refresh()` inside `_refresh_all()`.
+  .. If the tab is Snapshot!-only, also hide it in `_on_game_changed()`.
+
+=== Minimal Feature Module Template
+
+[source,python]
+----
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from modules.pack_manager import PackManager
+
+
+class MyFeatureWidget(QWidget):
+    def __init__(self, pack_manager: PackManager) -> None:
+        super().__init__()
+        self._pm = pack_manager
+        layout = QVBoxLayout(self)
+        self._label = QLabel("My Feature")
+        layout.addWidget(self._label)
+
+    def refresh(self) -> None:
+        pass  # re-read self._pm.data and update widgets
+----
+
+== Adding Tooltips
+
+All tooltip strings live in `modules/tooltips.py` in the `TIPS` dict.
+Add a new entry, then call `set_tip(widget, "my_key")` anywhere in your widget.
+
+[source,python]
+----
+from modules.tooltips import set_tip
+
+set_tip(self._my_combo, "my_key")
+----
+
+Never hard-code tooltip text directly on widgets.
+
+== Showing Dialogs
+
+Never use `QMessageBox` directly (except `QMessageBox.about`).  Import the shared helpers from `ui.dialogs`:
+
+[source,python]
+----
+from ui.dialogs import show_info, show_warning, show_error
+
+# informational
+show_info(self, "Title", "Operation complete.", tag="MyWidget.method")
+
+# warning (no exception)
+show_warning(self, "Warning", "File not found.", tag="MyWidget.method")
+
+# error with traceback (pass the caught exception)
+try:
+    ...
+except Exception as exc:
+    show_error(self, "Error", str(exc), exc=exc, tag="MyWidget.method")
+----
+
+All three helpers log via `_dlog` before displaying.  In debug mode `show_error` appends the full traceback to the dialog body.
+
+=== Custom Dialogs
+
+For dialogs that need more than a text body, subclass `BaseAppDialog` from `ui.dialogs`.  Call `self._add_button_row(copy_text)` last to append the standard Copy / Close row.
+
+[source,python]
+----
+from PyQt6.QtWidgets import QLabel
+from ui.dialogs import BaseAppDialog
+
+
+class MyCustomDialog(BaseAppDialog):
+    def __init__(self, parent, data: dict) -> None:
+        super().__init__(parent, "My Dialog", level="info")
+        self._layout.addWidget(QLabel(f"Items: {len(data)}"))
+        self._add_button_row(str(data))
+----
+
+== Adding Menu Actions
+
+Add actions in `ui/menubar.py`.
+Add the corresponding slot method on `MainWindow` in `ui/main_window.py`.
+Connect via `act.triggered.connect(window.on_my_action)`.
+
+== Debug Logging
+
+[source,python]
+----
+from app_debug import dlog as _dlog
+
+# inside a method:
+_dlog("MyWidget.my_method", "Something happened")
+----
+
+Debug output is printed only when `--debug` is passed at startup.
+Never use bare `print()` in production code paths.
+
+=== Minimal Feature Module Template
+
+[source,python]
+----
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from modules.pack_manager import PackManager
+
+
+class MyFeatureWidget(QWidget):
+    def __init__(self, pack_manager: PackManager) -> None:
+        super().__init__()
+        self._pm = pack_manager
+        layout = QVBoxLayout(self)
+        self._label = QLabel("My Feature")
+        layout.addWidget(self._label)
+
+    def refresh(self) -> None:
+        pass  # re-read self._pm.data and update widgets
+----
+
+== Showing Dialogs
+
+Never use `QMessageBox` directly (except `QMessageBox.about`).  Import the shared helpers from `ui.dialogs`:
+
+[source,python]
+----
+from ui.dialogs import show_info, show_warning, show_error
+
+# informational
+show_info(self, "Title", "Operation complete.", tag="MyWidget.method")
+
+# warning (no exception)
+show_warning(self, "Warning", "File not found.", tag="MyWidget.method")
+
+# error with traceback (pass the caught exception)
+try:
+    ...
+except Exception as exc:
+    show_error(self, "Error", str(exc), exc=exc, tag="MyWidget.method")
+----
+
+All three helpers log via `_dlog` before displaying.  In debug mode `show_error` appends the full traceback to the dialog body.
+
+=== Custom Dialogs
+
+For dialogs that need more than a text body, subclass `BaseAppDialog` from `ui.dialogs`.  Call `self._add_button_row(copy_text)` last to append the standard Copy / Close row.
+
+[source,python]
+----
+from PyQt6.QtWidgets import QLabel
+from ui.dialogs import BaseAppDialog
+
+
+class MyCustomDialog(BaseAppDialog):
+    def __init__(self, parent, data: dict) -> None:
+        super().__init__(parent, "My Dialog", level="info")
+        self._layout.addWidget(QLabel(f"Items: {len(data)}"))
+        self._add_button_row(str(data))
+----
+
+== Adding Menu Actions
+
+Add actions in `ui/menubar.py`.
+Add the corresponding slot method on `MainWindow` in `ui/main_window.py`.
+Connect via `act.triggered.connect(window.on_my_action)`.
+
+== Debug Logging
+
+[source,python]
+----
+from app_debug import dlog as _dlog
+
+# inside a method:
+_dlog("MyWidget.my_method", "Something happened")
+----
+
+Debug output is printed only when `--debug` is passed at startup.
+Never use bare `print()` in production code paths.

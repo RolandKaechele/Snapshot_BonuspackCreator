@@ -1,0 +1,46 @@
+== Main Window
+
+The main window is divided into:
+
+* **Menu bar** — File, Edit, Tools, Help menus
+* **Tab bar** — one tab per feature area
+* **Status bar** — live feedback and validation messages
+
+Tabs that are not supported by the selected game are hidden automatically.
+Choosing *Lewd Shores* on the Pack Info tab hides City Events, Cutscenes, and Love Lens.
+The tabs reappear instantly when you switch back to *Snapshot!*.
+
+== Tabs
+
+[cols="1,2,1"]
+|===
+| Tab | Description | Game
+
+| Pack Info
+| Pack identity, defaults, special category and traits
+| Both
+
+| Photos
+| Add and configure collectible photo cards
+| Both
+
+| Overwrite Texts
+| Override displayed trait labels per image
+| Both
+
+| City Events
+| Scripted events with dialog JSON and backgrounds
+| Snapshot! only
+
+| Cutscenes
+| Frame-sequence cutscene preview and metadata
+| Snapshot! only
+
+| Love Lens
+| Full character replacement set
+| Snapshot! only
+
+| Orphaned Files
+| Unreferenced assets on disk and broken ini references; auto-hidden when empty
+| Both
+|===

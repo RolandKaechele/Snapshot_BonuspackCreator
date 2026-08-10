@@ -1,0 +1,50 @@
+== Getting Started
+
+=== Plugin Location
+
+Place your plugin inside the `plugins\` directory at the project root.
+
+Two forms are supported:
+
+[cols="1,3"]
+|===
+| Form | When to use
+
+| Package directory (`plugins\myplugin\__init__.py`)
+| Multi-file plugins, plugins with their own assets or sub-modules
+
+| Single module (`plugins\myplugin.py`)
+| Simple single-file plugins
+|===
+
+=== Minimum Required Interface
+
+Every plugin must expose a top-level `register` function:
+
+[source,python]
+----
+def register(app) -> None:
+    ...
+----
+
+`app` is the live `MainWindow` instance.
+The function is called once at startup after the main window is fully built.
+
+=== Naming Rules
+
+* Package or module name must be a valid Python identifier.
+* Names starting with `_` are ignored by the loader.
+* Names must not shadow any standard library module.
+
+=== Verifying Your Plugin Loaded
+
+Go to *Tools → Manage Plugins…* — the dialog lists all successfully loaded plugin names.
+
+Alternatively, launch with `--debug` and watch the console:
+
+[source,bat]
+----
+venv\Scripts\python.exe src\main.py --debug
+----
+
+A line like `[PluginSystem.load_plugins] Loaded plugin: myplugin` confirms successful loading.

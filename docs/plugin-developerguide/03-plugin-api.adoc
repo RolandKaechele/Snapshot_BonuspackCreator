@@ -1,0 +1,53 @@
+== Plugin API Reference
+
+=== `register(app)`
+
+Called once at startup with the `MainWindow` instance as `app`.
+
+[cols="1,1,3"]
+|===
+| Parameter | Type | Description
+
+| `app`
+| `MainWindow`
+| The live main window. Use it to access all application services.
+|===
+
+=== `app` Object — Available Attributes and Methods
+
+[cols="1,3"]
+|===
+| Attribute / Method | Description
+
+| `app._pack_manager`
+| `PackManager` instance — read and write the current in-memory pack data
+
+| `app._tabs`
+| `QTabWidget` — add or access feature tabs
+
+| `app.menuBar()`
+| `QMenuBar` — add menus and actions
+
+| `app.statusBar()`
+| Qt's raw `QStatusBar`
+
+| `app.status()`
+| `StatusbarController` — `set_info(msg)`, `set_ok(msg)`, `set_error(msg)`
+
+| `app._refresh_all()`
+| Re-reads pack data into all tab widgets; call after modifying pack data
+|===
+
+=== Debug Logging
+
+Import and use `dlog` to write to the debug console (active only with `--debug`):
+
+[source,python]
+----
+from app_debug import dlog as _dlog
+
+def register(app):
+    _dlog("myplugin.register", "Plugin registered")
+----
+
+Never use `print()` for debug output.

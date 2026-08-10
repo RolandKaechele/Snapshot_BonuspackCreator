@@ -1,0 +1,6 @@
+== Cutscenes Tab
+
+NOTE: This tab is currently *hidden* — no released bonus pack format supports cutscenes yet.
+It will be re-enabled once the game defines a cutscene pack.ini section.
+
+When visible it will show a compact sequence list and sub-tabs for *Preview* (step through PNG frames) and *Metadata* (free-form JSON).

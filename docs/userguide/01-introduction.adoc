@@ -1,0 +1,8 @@
+== Introduction
+
+Snapshot Pack Creator is a Windows desktop application for creating and editing bonus content packs for:
+
+* *Snapshot!*
+* *Snapshot: Lewd Shores*
+
+A full offline desktop workflow, project files, plugin support, and more.

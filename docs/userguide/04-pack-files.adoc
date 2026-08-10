@@ -1,0 +1,43 @@
+== Working with Pack Files
+
+=== Creating a New Pack
+
+Select *File → New Pack* or press `Ctrl+N`.
+If the current pack has unsaved changes you will be asked to confirm before the views are cleared.
+A blank pack is created in memory. Fill in the fields on each tab, then save.
+
+=== Opening an Existing Pack
+
+Select *File → Open Pack…* or press `Ctrl+O`.
+Choose a `.json` project file previously saved by this application.
+
+NOTE: To open a pack that was originally created with the browser tool, use *File → Import Bonus Content…* instead and point it at the pack folder containing `pack.ini`.
+
+=== Saving a Pack
+
+Select *File → Save Pack* (`Ctrl+S`) to save to the current file.
+Use *File → Save Pack As…* (`Ctrl+Shift+S`) to choose a new location.
+
+Pack project files are saved as UTF-8 JSON (`.json`).
+
+=== Importing a Bonus Content Folder
+
+Select *File → Import Bonus Content…* and choose a pack folder that contains `pack.ini` (e.g. `Snapshot_BonusPack_mypack\`).
+
+If the current pack has unsaved changes you will be asked to confirm before proceeding.
+Once confirmed, all views are cleared before the new pack is loaded so no data from the previous pack lingers.
+
+The application reads `pack.ini` and the `Data\` folder and loads everything into the current project.
+
+=== Exporting a Bonus Content Folder
+
+Select *File → Export Bonus Content…* and choose a parent output folder.
+
+The application creates the correct folder structure and writes `pack.ini` and all `.dat` image files.
+Copy the resulting folder into the game's `BonusContent\` directory:
+
+[source]
+----
+Snapshot!\BonusContent\Snapshot_BonusPack_<id>\
+Snapshot Lewd Shores\BonusContent\LewdShores_BonusPack_<id>\
+----

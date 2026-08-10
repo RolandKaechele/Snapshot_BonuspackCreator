@@ -1,0 +1,43 @@
+== Packaging and Distribution
+
+=== Recommended Package Structure
+
+[source]
+----
+plugins\
+└── my_awesome_plugin\
+    ├── __init__.py        ← must contain register(app)
+    ├── widget.py          ← optional sub-modules
+    └── README.md          ← describe what the plugin does
+----
+
+=== Dependencies
+
+If your plugin requires third-party packages:
+
+. List them in a `requirements.txt` inside your plugin folder.
+. Document in your README that the user must install them into the application venv:
+
+[source,bat]
+----
+venv\Scripts\python.exe -m pip install -r plugins\my_awesome_plugin\requirements.txt
+----
+
+Do not assume any package is available beyond what is already listed in the application's root `requirements.txt` (`PyQt6`, `Pillow`).
+
+=== Distribution
+
+Zip the plugin folder and share it.
+Users drop the unzipped folder into `plugins\` and restart the application.
+
+=== Versioning
+
+Include a `__version__` string in your `__init__.py` for your own tracking:
+
+[source,python]
+----
+__version__ = "1.0.0"
+
+def register(app):
+    ...
+----

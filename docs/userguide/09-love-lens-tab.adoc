@@ -1,0 +1,25 @@
+== Love Lens Tab
+
+NOTE: This tab is only visible when the game is set to *Snapshot!* on the Pack Info tab.
+
+The tab is divided into four sub-tabs.
+
+=== Character Setup
+
+Set the character model, hair style, accessories, hair color, and eye color.
+
+=== 2D Overlay Slots
+
+Click *+* next to each overlay slot to assign a PNG image.
+A single slot accepts one image (click *+* again to replace).
+
+=== Texture Slots
+
+Same as overlays but some slots (bra, panty, dropped bra) accept multiple images — the game picks one randomly.
+
+=== Result Photos
+
+Assign one 1024 × 1024 result photo for each Love Lens scene type.
+A complete Love Lens pack needs a photo for every type.
+
+TIP: Double-click any overlay or texture preview to open a full-resolution viewer where you can zoom in/out and open the file in the system default editor.

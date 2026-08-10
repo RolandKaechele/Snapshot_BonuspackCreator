@@ -1,0 +1,86 @@
+== UI Integration
+
+=== Adding a Menu Action
+
+[source,python]
+----
+from PyQt6.QtGui import QAction
+
+def register(app):
+    action = QAction("My Plugin Action", app)
+    action.triggered.connect(lambda: _on_action(app))
+    tools_menu = None
+    for action_item in app.menuBar().actions():
+        if action_item.text() == "&Tools":
+            tools_menu = action_item.menu()
+            break
+    if tools_menu:
+        tools_menu.addAction(action)
+
+def _on_action(app):
+    app.status().set_info("My plugin action triggered.")
+----
+
+=== Adding a Tab
+
+[source,python]
+----
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
+
+class MyPluginWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Hello from my plugin tab!"))
+
+    def refresh(self):
+        pass  # called by _refresh_all(); re-read pack data here if needed
+
+def register(app):
+    widget = MyPluginWidget()
+    app._tabs.addTab(widget, "My Plugin")
+----
+
+NOTE: Tab widgets added by plugins are not automatically included in `_refresh_all()`.
+Override the application's refresh by connecting to a signal, or keep a reference and refresh manually.
+
+=== Showing Dialogs
+
+Use the shared helpers from `ui.dialogs` — never call `QMessageBox` directly:
+
+[source,python]
+----
+from ui.dialogs import show_info, show_warning, show_error
+
+def _on_action(app):
+    try:
+        do_something()
+        show_info(app, "Done", "Operation completed.", tag="my_plugin.action")
+    except Exception as exc:
+        show_error(app, "Plugin Error", str(exc), exc=exc, tag="my_plugin.action")
+----
+
+For a fully custom layout, subclass `BaseAppDialog` and call `self._add_button_row(copy_text)` last:
+
+[source,python]
+----
+from PyQt6.QtWidgets import QLabel
+from ui.dialogs import BaseAppDialog
+
+class MyPluginDialog(BaseAppDialog):
+    def __init__(self, parent):
+        super().__init__(parent, "My Plugin", level="info")
+        self._layout.addWidget(QLabel("Hello from a custom dialog!"))
+        self._add_button_row("Hello from a custom dialog!")
+----
+
+=== Posting Status Messages
+
+[source,python]
+----
+app.status().set_info("Something happened.")
+app.status().set_ok("Operation completed.")
+app.status().set_error("Something went wrong.")
+----
+
+All three methods accept an optional `timeout_ms` argument (default varies per level).

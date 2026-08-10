@@ -1,0 +1,10 @@
+== Overwrite Texts Tab
+
+=== Special Category / Pack Theme
+
+Set the display label and bubble color shown in-game for the pack theme (called *Special Category* in Snapshot! and *Pack Theme* in Lewd Shores).
+
+=== Love Lens Dialog Texts
+
+Override the dialog lines shown during the Love Lens sequence.
+Leave fields blank to use the game's built-in default text.

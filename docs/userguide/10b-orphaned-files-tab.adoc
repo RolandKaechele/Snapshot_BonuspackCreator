@@ -1,0 +1,37 @@
+== Orphaned Files Tab
+
+The *Orphaned Files* tab appears automatically after importing a pack when the application finds assets on disk that need attention.
+It is hidden when there is nothing to report.
+
+=== Orphaned Files (top list)
+
+An *orphaned* file is a file that exists in the pack's `Data/` folder (or root folder) but is not referenced by any photo, event, overlay, texture, or dialog JSON in the current pack.
+
+Common causes:
+
+* The pack author included extra source files or work-in-progress assets.
+* A photo was removed from the pack but its image file was left behind.
+* Dialog JSON references an asset only by path string inside JSON content.
+
+Click any entry to see a preview on the right:
+
+* **Image files** (`.dat`, `.jpa`, `.pna`, etc.) — shown as a scaled image.
+* **JSON files** — shown as pretty-printed JSON text.
+
+Select one or more files and click *Delete selected from disk* to permanently remove them.
+A confirmation dialog lists the file names before deleting.
+
+On export, all orphaned files are automatically copied into the exported `Data/` folder alongside the referenced assets.
+
+=== Broken References (bottom list)
+
+A *broken* reference is a filename that appears in the pack ini or events data but whose corresponding file does not exist on disk.
+These entries are shown with a yellow icon.
+
+Broken references do not block export but will cause missing-asset errors in-game.
+
+=== Tips
+
+* The tab refreshes automatically whenever you import a pack or switch packs.
+* Deleting an orphaned file is permanent and cannot be undone.
+* A file that is referenced only inside a dialog JSON string (e.g. as an image argument to `showImage`) is counted as referenced and will _not_ appear as orphaned.

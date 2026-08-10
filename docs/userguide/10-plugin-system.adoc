@@ -1,0 +1,7 @@
+== Plugin System
+
+Drop plugin packages or `.py` modules into the `plugins\` folder.
+Each plugin must expose a `register(app)` function.
+The application loads plugins automatically at startup.
+
+See `plugins\README.md` for a minimal example.

@@ -1,0 +1,6 @@
+== Overview
+
+This guide is written for developers who want to extend Snapshot Pack Creator by writing a plugin.
+
+Plugins can add new menu actions, extra tabs, custom export steps, validation logic, or any other feature that integrates with the main application window.
+They do not require changes to the core source code and can be installed by dropping a single folder into `plugins\`.

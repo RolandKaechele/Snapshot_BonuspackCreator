@@ -1,0 +1,30 @@
+== Plugin API
+
+A plugin is any Python package in `plugins/` that exposes `register(app)`.
+
+`app` is the `QMainWindow` instance.
+
+=== What a Plugin Can Do
+
+* Access `app._pack_manager` to read/write pack data.
+* Call `app.status().set_info(...)` to post status messages.
+* Add menu actions via `app.menuBar()`.
+* Add dock widgets or tabs (access `app._tabs`).
+
+=== Plugin Discovery
+
+`PluginSystem.load_plugins()` scans `plugins/`:
+
+* Directories with `__init__.py` are imported as packages.
+* Files ending in `.py` (not starting with `_`) are imported as modules.
+* Import errors are caught and logged — they never crash the application.
+
+=== Minimal Plugin
+
+[source,python]
+----
+# plugins/hello/__init__.py
+
+def register(app):
+    app.status().set_info("Hello from my plugin!")
+----

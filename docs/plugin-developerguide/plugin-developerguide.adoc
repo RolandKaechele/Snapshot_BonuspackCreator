@@ -1,0 +1,19 @@
+= Snapshot Pack Creator — Plugin Developer Guide
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+include::01-overview.adoc[]
+
+include::02-getting-started.adoc[]
+
+include::03-plugin-api.adoc[]
+
+include::04-pack-manager-access.adoc[]
+
+include::05-ui-integration.adoc[]
+
+include::06-packaging-and-distribution.adoc[]
+
+include::07-examples.adoc[]

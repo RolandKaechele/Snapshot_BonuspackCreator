@@ -1,0 +1,88 @@
+== Architecture
+
+=== Startup Sequence
+
+. `main.py` parses `--debug`, enables debug logging if requested.
+. Loads `src/ui/style.qss` and applies it to `QApplication`.
+. Instantiates `MainWindow`.
+. `MainWindow.__init__` creates a `PackManager`, `ImportExportManager`, and `PluginSystem`, then builds the UI and loads plugins.
+
+=== Data Flow
+
+All in-memory pack state lives in `PackManager._data` — a `_DirtyDict` (dict subclass) that automatically calls `mark_dirty()` on any mutation.
+Modules read and write it via `PackManager.get()` / `PackManager.set()` / direct access to `PackManager.data`.
+`PackManager.is_dirty` returns `True` whenever unsaved changes exist; it is reset to `False` by `save()`, `load()`, and `new_pack()`.
+`MainWindow._refresh_all()` calls `refresh()` on every tab widget to re-read the data dict after a load or new-pack, then syncs tab visibility via `_on_game_changed()`.
+
+=== Game-Aware Tab Visibility
+
+`PackInfoWidget` emits `game_changed = pyqtSignal(str)` whenever the game combo changes.
+`MainWindow._on_game_changed(game)` calls `self._tabs.setTabVisible(idx, ...)` to hide the Snapshot!-only tabs (City Events index 3, Love Lens index 5) when `game == "lewdshores"`.
+Cutscenes (index 4) is unconditionally hidden at startup via `setTabVisible(4, False)` until the game defines a cutscene pack format.
+On import, `gameID` is read from `[Mod]` / `[Pack]` and stored as `game`; `_refresh_all()` re-applies visibility automatically.
+
+=== Tooltip System
+
+`modules/tooltips.py` holds a central `TIPS: dict[str, str]` registry.
+Call `set_tip(widget, key)` to attach a tooltip — this keeps tooltip text out of widget code.
+
+=== Module Map
+
+[cols="1,3"]
+|===
+| Module | Responsibility
+
+| `app_debug.py`
+| Central `is_debug` flag, `dlog(tag, msg)` helper
+
+| `ui/main_window.py`
+| `QMainWindow` shell, tab assembly, game-aware tab hiding, menu handlers, `_refresh_all()`
+
+| `ui/menubar.py`
+| Builds the menu bar and wires actions to `MainWindow` slots
+
+| `ui/statusbar.py`
+| `StatusbarController` — `set_info`, `set_ok`, `set_error`, `set_permanent`
+
+| `ui/dialogs.py`
+| `BaseAppDialog` base class; `show_info`, `show_warning`, `show_error`, `show_confirm`, `show_confirm_with_checkbox` helpers
+
+| `ui/image_viewer.py`
+| `ImageViewerDialog` — zoomable full-res viewer (＋/－/1:1/Fit, Ctrl+Scroll, system-editor launch via `os.startfile`); `attach_viewer(label, get_path)` — installs a double-click event filter on any `QLabel` to open the dialog
+
+| `ui/style.qss`
+| Catppuccin Mocha dark theme stylesheet; `QComboBox::down-arrow` triangle arrow
+
+| `modules/pack_manager.py`
+| `PackManager` — load/save JSON, `new_pack()`, typed accessors; `is_dirty` / `mark_dirty()` — automatic dirty tracking via `_DirtyDict` (all `pm.data[key]=` writes mark the pack dirty; reset by `save()`, `load()`, `new_pack()`)
+
+| `modules/import_export.py`
+| `ImportExportManager` — reads `pack.ini` folders (all ini merged); detects `gameID`; parses `[Defaults]` and `[Events]` into structured fields; writes split export folders; see <<import-export-internals>> for details
+
+| `modules/pack_info_widget.py`
+| `PackInfoWidget` — three-tab editor: Identity, Defaults, Category & Traits; emits `game_changed` signal
+
+| `modules/tooltips.py`
+| Central `TIPS` registry; `set_tip(widget, key)` helper
+
+| `modules/picture_widget.py`
+| `PictureWidget` — photo list, per-image trait dropdowns, `hypnoType` for hypno position, preview
+
+| `modules/overwrite_texts.py`
+| `OverwriteTextsWidget` — category label and Love Lens dialog texts
+
+| `modules/image_utils.py`
+| `load_pixmap(path)` — content-sniffing image loader; `resolve_asset(name, folder)` — searches `Data/` then pack root; `ASSET_FILTER` file-dialog filter string
+
+| `modules/event_widget.py`
+| `EventWidget` — Backgrounds/Overlays (list + live preview) and Dialogs (3-pane: scene list / node list / node form); `_extract_nodes`, `_write_nodes`, `_remap_refs` — flat nd_* JSON helpers; `validate_events(events)` — module-level validation used by export
+
+| `modules/cutscene_widget.py`
+| `CutsceneWidget` — compact sequence list; tabbed Preview and Metadata panels
+
+| `modules/love_lens.py`
+| `LoveLensWidget` — tabbed Character Setup / 2D Overlay Slots / Texture Slots / Result Photos
+
+| `modules/plugin_system.py`
+| `PluginSystem` — discovers and imports plugins from `plugins/`
+|===

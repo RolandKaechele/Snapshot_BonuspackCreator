@@ -1,0 +1,51 @@
+== Pack Info Tab
+
+The Pack Info tab is the starting point for every new pack.
+It is divided into three sub-tabs.
+
+=== Identity
+
+[cols="1,3"]
+|===
+| Field | Purpose
+
+| Pack ID
+| Short lowercase identifier used in file and folder names (e.g. `beachpack`)
+
+| Title
+| Display name shown in the game's collection screen
+
+| Game
+| Target game — *Snapshot!* or *Lewd Shores*. Selecting Lewd Shores hides the Snapshot!-only tabs (City Events, Cutscenes, Love Lens).
+
+| Pack Type
+| *Photos*, *Events*, or *Love Lens*
+
+| ID Range
+| Numeric range for photo IDs (e.g. `110400-110499`). Leave empty to let the exporter assign IDs automatically.
+|===
+
+TIP: Click *🎮 Get ID on Discord* to open the Snapshot! Discord server and request a unique ID range for your pack.
+
+=== Defaults
+
+Sets the fallback position, type, and color that the game uses for photos that do not specify their own values (`[Defaults]` section of `pack.ini`).
+
+=== Category & Traits
+
+[cols="1,3"]
+|===
+| Field | Purpose
+
+| Category Label
+| Optional badge text shown on collection cards (e.g. `Bikini`, `Nurse`)
+
+| Badge Color (hex)
+| Hex color for the badge bubble. Click *Pick…* to open the colour picker. The swatch to the left of the field previews the selected color live.
+
+| specialType aliases
+| Custom underwear type tokens and their display labels (`[Special Traits]`)
+
+| specialColor aliases
+| Custom color tokens and their display labels
+|===

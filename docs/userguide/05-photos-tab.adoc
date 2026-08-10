@@ -1,0 +1,46 @@
+== Photos Tab
+
+The Photos tab is the main editing area for Regular Photos packs.
+
+=== Adding Images
+
+Click *Add…* and select one or more image files.
+The app accepts `.png`, `.jpg`, `.jpeg`, and game-specific formats `.dat`, `.jpa`, and `.pna` (renamed JPEG / PNG files used by community packs).
+Images are identified by their content, not by their file extension.
+
+IMPORTANT: Regular photos and Love Lens result photos must be exactly 1024 × 1024 px.
+
+=== Removing Images
+
+Select an image in the list and click *Remove*.
+
+=== Assigning Traits
+
+Each image has:
+
+[cols="1,3"]
+|===
+| Field | Purpose
+
+| Position
+| Where in the game this photo appears (upskirt, bench, event, hypno, etc.)
+
+| Type
+| The underwear / content type (plain, kinky, cum, etc.)
+
+| Color / Special
+| The color tag or special detail shown in the photo detail view
+
+| Love Lens Type
+| Sub-type for Love Lens scenes (topless, nude, cumFace, etc.) — only visible when Position is set to `hypno`
+|===
+
+Enable *Overwrite Type* or *Overwrite Color/Special* to replace the displayed label without changing the internal value.
+
+Mark *Use as Thumbnail* on exactly one image to set the pack preview icon.
+
+=== Preview
+
+The right panel shows a scaled preview of the selected image.
+
+TIP: Double-click the preview to open a full-resolution viewer where you can zoom in/out (buttons or Ctrl+Scroll) and open the file in the system default editor.

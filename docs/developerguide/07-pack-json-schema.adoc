@@ -1,0 +1,146 @@
+== Pack JSON Schema
+
+Pack project files are plain JSON.
+All keys that appear in `PackManager._EMPTY_PACK` are guaranteed to be present after a load.
+
+[cols="1,1,3"]
+|===
+| Key | Type | Description
+
+| `version`
+| `int`
+| File format version (currently 1)
+
+| `game`
+| `str`
+| `"snapshot"` or `"lewdshores"`
+
+| `pack_type`
+| `str`
+| `"photos"`, `"lovelens"`, or `"events"`
+
+| `title`
+| `str`
+| Display name shown in-game
+
+| `id`
+| `str`
+| Pack identifier (lowercase, no spaces)
+
+| `id_range`
+| `str`
+| Numeric ID range, e.g. `"110400-110499"`
+
+| `special_category`
+| `str`
+| Category / theme label shown in-game
+
+| `special_category_color`
+| `str`
+| Hex color for the category bubble
+
+| `special_types`
+| `list[str]`
+| Raw `specialType` entries from `[Special Traits]` (e.g. `"\"Busted!\",busted,kinky"`); written back verbatim on export
+
+| `special_colors`
+| `list[str]`
+| Raw `specialColor` entries from `[Special Traits]`; written back verbatim on export
+
+| `passthrough_sections`
+| `list[tuple[str, list[str]]]`
+| Raw `(header_line, content_lines)` blocks for unrecognised ini sections preserved verbatim on export.
+
+| `defaults_position`
+| `str`
+| Default photo position written to `[Defaults]` (e.g. `"upskirt"`)
+
+| `defaults_type`
+| `str`
+| Default photo type written to `[Defaults]`
+
+| `defaults_color`
+| `str`
+| Default photo color written to `[Defaults]`
+
+| `event_type`
+| `str`
+| City event type: `"normal"` or `"explosion"`
+
+| `photos`
+| `list[dict]`
+| Photo entries (see below)
+
+| `overlays`
+| `dict[str, list[str]]`
+| Overlay slot key → list of file paths
+
+| `textures`
+| `dict[str, list[str]]`
+| Texture slot key → list of file paths
+
+| `texts`
+| `dict[str, str]`
+| Love Lens dialog text overrides
+
+| `events`
+| `list[dict]`
+| City event backgrounds and dialog JSON entries
+
+| `cutscenes`
+| `list[dict]`
+| Cutscene sequences (list of frame paths + metadata)
+
+| `love_lens_photos`
+| `dict[str, list[str]]`
+| Result photo slot key → list of file paths
+
+| `love_lens`
+| `dict`
+| Character setup: model, hairStyle, accessories, hairColor, eyeColor
+|===
+
+=== Photo Entry
+
+[cols="1,1,3"]
+|===
+| Key | Type | Description
+
+| `name`
+| `str`
+| Internal image name (used as `pack.ini` key and `.dat` filename)
+
+| `source`
+| `str or null`
+| Absolute path to the source image file.
+During import the app tries `Data/<name>.dat`, then `Data/<name>.jpa`, `.pna`, `.png`, `.jpg`, `.jpeg`, then the same set in the pack root folder.
+Images are identified by content (byte sniffing), not by file extension.
+
+| `position`
+| `str`
+| Position value (e.g. `"upskirt"`, `"bench"`)
+
+| `type`
+| `str`
+| Type value (e.g. `"plain"`, `"kinky"`)
+
+| `color`
+| `str`
+| Color / special value (e.g. `"white"`, `"pink"`)
+
+| `overwrite_type`
+| `str`
+| Custom display label for type (empty = use dropdown value)
+
+| `overwrite_color`
+| `str`
+| Custom display label for color (empty = use dropdown value)
+
+| `thumbnail`
+| `bool`
+| Whether this image is the pack thumbnail
+
+| `hypnoType`
+| `str`
+| Love Lens scene sub-type (e.g. `"topless"`, `"nude"`); only written to ini when position is `hypno`
+|===

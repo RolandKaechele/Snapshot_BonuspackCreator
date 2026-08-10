@@ -1,0 +1,60 @@
+== Accessing and Modifying Pack Data
+
+All in-memory pack state is stored in `PackManager._data` — a plain Python `dict`.
+Use the typed accessor methods rather than accessing `_data` directly.
+
+=== Reading Data
+
+[source,python]
+----
+pm = app._pack_manager
+
+game       = pm.get("game", "snapshot")      # "snapshot" | "lewdshores"
+pack_type  = pm.get("pack_type", "photos")
+title      = pm.get("title", "")
+photos     = pm.get("photos", [])            # list of photo dicts
+# Import-only fields preserved for round-trip export:
+special_types  = pm.get("special_types", [])     # list of raw specialType strings
+special_colors = pm.get("special_colors", [])    # list of raw specialColor strings
+passthrough    = pm.get("passthrough_sections", [])  # [(header, lines)] verbatim blocks
+----
+
+=== Writing Data
+
+[source,python]
+----
+pm.set("title", "My Plugin Pack")
+pm.set("game", "lewdshores")
+----
+
+=== Adding and Removing Photos
+
+[source,python]
+----
+pm.add_photo({
+    "name": "pk42",
+    "source": "/path/to/image.png",
+    "position": "bench",
+    "type": "plain",
+    "color": "white",
+    "overwrite_type": "",
+    "overwrite_color": "",
+    "thumbnail": False,
+})
+
+pm.remove_photo(0)   # remove photo at index 0
+----
+
+=== Refreshing the UI
+
+After modifying pack data, call `_refresh_all()` so all tabs re-read the updated data:
+
+[source,python]
+----
+pm.set("title", "Updated by plugin")
+app._refresh_all()
+----
+
+=== Pack JSON Schema
+
+Refer to `docs/developerguide/07-pack-json-schema.adoc` for the full list of keys and types.

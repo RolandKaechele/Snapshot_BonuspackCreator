@@ -1,0 +1,3 @@
+== Overview
+
+This guide covers the architecture, module map, plugin API, and the process for adding new features to Snapshot Pack Creator.

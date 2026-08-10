@@ -1,0 +1,32 @@
+#svn
+.svn
+
+# Build artefacts
+build/
+dist/
+.sconsign.dblite
+
+# Runtime / packaging
+venv/
+temp/
+tools/
+
+# Legacy browser tool
+snapshot_pack_creator.html
+
+# Test fixtures (game installations, bonus content packs)
+tests/bonuscontent/
+tests/Snapshot*/
+tests/pytests/__pycache__/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# pytest
+.pytest_cache/
+
+# Editor / OS
+.vscode/
+*.swp
+Thumbs.db

@@ -1,0 +1,82 @@
+== Examples
+
+=== Minimal Plugin
+
+[source,python]
+----
+# plugins/hello/__init__.py
+
+def register(app):
+    app.status().set_info("Hello from the hello plugin!")
+----
+
+=== Plugin That Adds a Menu Action and Reads Pack Data
+
+[source,python]
+----
+# plugins/pack_info/__init__.py
+
+from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import QMessageBox
+
+
+def register(app):
+    action = QAction("Show Pack Info", app)
+    action.triggered.connect(lambda: _show_info(app))
+    for menu_action in app.menuBar().actions():
+        if menu_action.text() == "&Tools":
+            menu_action.menu().addAction(action)
+            break
+
+
+def _show_info(app):
+    pm = app._pack_manager
+    title   = pm.get("title") or "(untitled)"
+    game    = pm.get("game", "snapshot")
+    n_photos = len(pm.get("photos", []))
+    QMessageBox.information(
+        app,
+        "Pack Info",
+        f"Title: {title}\nGame: {game}\nPhotos: {n_photos}",
+    )
+----
+
+=== Plugin That Adds an Extra Tab
+
+[source,python]
+----
+# plugins/notes_tab/__init__.py
+
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QLabel
+
+
+class NotesWidget(QWidget):
+    def __init__(self, pm):
+        super().__init__()
+        self._pm = pm
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Plugin Notes"))
+        self._editor = QTextEdit()
+        self._editor.textChanged.connect(self._save)
+        layout.addWidget(self._editor)
+
+    def _save(self):
+        self._pm.data.setdefault("plugin_data", {})["notes"] = (
+            self._editor.toPlainText()
+        )
+
+    def refresh(self):
+        notes = self._pm.data.get("plugin_data", {}).get("notes", "")
+        self._editor.blockSignals(True)
+        self._editor.setPlainText(notes)
+        self._editor.blockSignals(False)
+
+
+_widget = None
+
+
+def register(app):
+    global _widget
+    _widget = NotesWidget(app._pack_manager)
+    app._tabs.addTab(_widget, "Notes")
+----

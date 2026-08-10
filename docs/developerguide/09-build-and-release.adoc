@@ -1,0 +1,73 @@
+== Build and Release
+
+=== Prerequisites
+
+Before running the build, ensure the following are available:
+
+[cols="1,3"]
+|===
+| Tool | How to get it
+
+| `venv` with dependencies
+| Run `cli.bat` once
+
+| `pyinstaller`
+| `venv\Scripts\pip install pyinstaller`
+
+| `asciidoctor-pdf`
+| `gem install asciidoctor-pdf` (requires Ruby)
+
+| `7zCon.sfx`
+| Download *7-Zip Extra* from https://www.7-zip.org/download.html and place `7zCon.sfx` beside `7z.exe` or in `tools/`
+|===
+
+=== Running the Build
+
+[source,bat]
+----
+venv\Scripts\python.exe -m scons
+----
+
+This executes the `SConstruct` script in the project root and produces:
+
+[cols="2,3"]
+|===
+| Artefact | Description
+
+| `dist/SnapshotPackCreator/`
+| Frozen one-directory bundle (PyInstaller)
+
+| `dist/SnapshotPackCreator/docs/*.pdf`
+| User guide, Developer guide, Plugin Developer guide as PDF
+
+| `dist/SnapshotPackCreator_vYYYY-MM-DD_installer.exe`
+| Console SFX installer (no UAC, self-extracting via 7zCon.sfx)
+|===
+
+To clean all build artefacts:
+
+[source,bat]
+----
+venv\Scripts\python.exe -m scons -c
+----
+
+=== Version String
+
+`SConstruct` patches `src/_version.py` at the start of every build with the current date (`vYYYY-MM-DD`).  The running application imports this file to display its build version:
+
+[source,python]
+----
+from _version import BUILD_VERSION
+----
+
+The file is committed as a placeholder (`v0.0.0-dev`) and must never be edited manually.
+
+=== Build Pipeline
+
+The SCons targets run in order:
+
+. *patch_version* — writes `BUILD_VERSION` into `src/_version.py`
+. *build_docs* — converts the three umbrella `.adoc` files to PDF via `asciidoctor-pdf`
+. *pyinstaller_build* — freezes `src/main.py` into `dist/SnapshotPackCreator/`
+. *copy_docs* — copies PDFs from `build/docs/` into `dist/SnapshotPackCreator/docs/`
+. *create_sfx* — packs the bundle into the SFX installer

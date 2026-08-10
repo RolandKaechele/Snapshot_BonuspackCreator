@@ -1,0 +1,29 @@
+# Normalise line endings to LF in the repository; check out as CRLF on Windows
+* text=auto eol=lf
+
+# Force LF for all text source files
+*.py    text eol=lf
+*.adoc  text eol=lf
+*.md    text eol=lf
+*.qss   text eol=lf
+*.json  text eol=lf
+*.ini   text eol=lf
+*.txt   text eol=lf
+*.bat   text eol=crlf
+*.cfg   text eol=lf
+*.toml  text eol=lf
+*.rst   text eol=lf
+
+# Explicitly binary — no line-ending conversion
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.dat   binary
+*.jpa   binary
+*.pna   binary
+*.exe   binary
+*.dll   binary
+*.pyd   binary
+*.zip   binary
+*.7z    binary
+*.pdf   binary

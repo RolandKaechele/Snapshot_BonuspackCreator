@@ -1,0 +1,25 @@
+= Snapshot Pack Creator — Developer Guide
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+include::01-overview.adoc[]
+
+include::02-environment.adoc[]
+
+include::03-project-structure.adoc[]
+
+include::04-architecture.adoc[]
+
+include::04b-import-export-internals.adoc[]
+
+include::05-adding-features.adoc[]
+
+include::06-plugin-api.adoc[]
+
+include::07-pack-json-schema.adoc[]
+
+include::08-testing.adoc[]
+
+include::09-build-and-release.adoc[]

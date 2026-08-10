@@ -1,0 +1,24 @@
+== Installation
+
+=== Requirements
+
+* Windows 10 or later
+* No Python or Java installation required — a portable Python runtime is bundled in `temp\`
+
+=== First Run
+
+. Double-click `cli.bat`.
+  It will create a virtual environment in `venv\`, install all dependencies, and open a command prompt.
+. From that prompt, launch the application:
+
+[source,bat]
+----
+venv\Scripts\python.exe src\main.py
+----
+
+To enable verbose debug logging, add `--debug`:
+
+[source,bat]
+----
+venv\Scripts\python.exe src\main.py --debug
+----

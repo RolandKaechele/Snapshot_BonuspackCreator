@@ -1,0 +1,40 @@
+== Testing
+
+Run the full test suite:
+
+[source,bat]
+----
+venv\Scripts\pytest tests\
+----
+
+Tests live in `tests\` and are named `test_<module>.py`.
+Use `pytest-qt` for widget tests (the `qtbot` fixture).
+Use `tmp_path` for any test that reads or writes files.
+
+=== Test files
+
+[cols="1,3"]
+|===
+| File | What it covers
+
+| `test_app_debug.py`
+| `set_debug`, `is_debug`, `dlog` — flag toggling, output format
+
+| `test_pack_manager.py`
+| `PackManager` — new pack, get/set, photo list, JSON save/load, encoding, dirty tracking (`is_dirty`, `mark_dirty`, auto-dirty on `_DirtyDict` mutations)
+
+| `test_import_export.py`
+| `_write_pack_ini`, `_read_pack_ini`, `_export_photo_files` — no Qt required
+
+| `test_plugin_system.py`
+| Plugin discovery, loading, error isolation
+
+| `test_statusbar.py`
+| `StatusbarController` methods via `MagicMock`
+
+| `test_dialogs.py`
+| `BaseAppDialog`, `_ClipboardDialog`, `show_info`/`show_warning`/`show_error`/`show_confirm`/`show_confirm_with_checkbox`
+
+| `test_event_widget.py`
+| `_extract_nodes`, `_write_nodes`, `_remap_refs`, `_node_label`, `validate_events` — all pure functions, no Qt required
+|===

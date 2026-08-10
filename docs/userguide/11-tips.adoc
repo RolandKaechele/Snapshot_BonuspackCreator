@@ -1,0 +1,11 @@
+== Tips and Common Mistakes
+
+* *ID Range conflicts* — request a unique range on the Snapshot Discord before publishing. Two packs sharing the same range overwrite each other in-game.
+* *Image size* — regular photos and Love Lens result photos must be exactly 1024 × 1024 px.
+* *Large packs* — when exporting more than 100 photos the app automatically splits the pack into numbered ini files (e.g. `mypack1.ini`, `mypack2.ini`) and shifts the ID range by 100 per file, matching the format used by community mega-packs.
+* *Bundle import* — packs with multiple ini files (no `pack.ini`) are imported by merging all files; part-number suffixes are stripped from the id and title automatically.
+* *Game image formats* — `.dat`, `.jpa`, and `.pna` files (renamed JPEG / PNG) are supported on import and preview; images are identified by content, not extension.
+* *Thumbnail* — set exactly one image as the thumbnail; it becomes the pack preview icon.
+* *Overwrite text* — start with a capital letter to match the game's display style.
+* *Lewd Shores vs Snapshot!* — changing the game type resets all loaded images and settings; export your pack first.
+* *Error dialogs* — every warning and error dialog has a *Copy to Clipboard* button so you can paste the full message when asking for support.

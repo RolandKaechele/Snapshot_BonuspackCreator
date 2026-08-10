@@ -1,0 +1,51 @@
+== Project Structure
+
+[source]
+----
+snapshot_pack_creator_V1_9/
+├── .github/
+│   ├── copilot-instructions.md
+│   └── instructions/
+│       ├── environment.instructions.md
+│       ├── coding-conventions.instructions.md
+│       ├── shell-and-vcs.instructions.md
+│       ├── testing.instructions.md
+│       └── documentation.instructions.md
+├── docs/
+│   ├── Analysis.md
+│   ├── BonusPack_GameSource_Analysis.md  ← game C# source analysis
+│   ├── userguide.adoc
+│   ├── userguide/           ← chapter files
+│   ├── developerguide.adoc
+│   ├── developerguide/      ← chapter files
+│   └── plugin-developerguide/  ← plugin author guide chapters
+├── plugins/              ← user-installable plugins
+├── src/
+│   ├── main.py           ← entry point
+│   ├── _version.py       ← build version (patched by SConstruct)
+│   ├── app_debug.py      ← debug flag and dlog helper
+│   ├── ui/
+│   │   ├── main_window.py
+│   │   ├── menubar.py
+│   │   ├── statusbar.py
+│   │   └── style.qss
+│   └── modules/
+│       ├── pack_manager.py
+│       ├── import_export.py
+│       ├── pack_info_widget.py  ← Pack Info tab (NEW)
+│       ├── tooltips.py          ← central tooltip registry (NEW)
+│       ├── picture_widget.py
+│       ├── overwrite_texts.py
+│       ├── event_widget.py
+│       ├── cutscene_widget.py
+│       ├── love_lens.py
+│       ├── orphaned_files.py    ← Orphaned Files tab
+│       └── plugin_system.py
+├── tests/
+├── temp/                 ← portable Python runtime (never committed)
+├── requirements.txt
+├── SConstruct            ← SCons build script (freeze + docs + SFX)
+├── LICENSE               ← MIT license
+├── README.md
+└── cli.bat
+----
