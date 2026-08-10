@@ -71,8 +71,6 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_installer.exe`.
 ```
 ├── .github/                    Copilot instruction files
 ├── docs/
-│   ├── Analysis.md             Feature reference and pack.ini documentation
-│   ├── BonusPack_GameSource_Analysis.md  Game C# source analysis
 │   ├── userguide/              End-user guide (AsciiDoc chapters)
 │   ├── developerguide/         Developer guide (AsciiDoc chapters)
 │   └── plugin-developerguide/  Plugin author guide (AsciiDoc chapters)
