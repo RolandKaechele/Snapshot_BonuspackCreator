@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import ( #type: ignore
     QCheckBox, QFileDialog, QSplitter, QGroupBox, QFormLayout,
     QLineEdit, QSizePolicy,
 )
-from PyQt6.QtGui import QPixmap #type: ignore
+from PyQt6.QtGui import QPixmap, QIcon #type: ignore
 from PyQt6.QtCore import Qt, QSize #type: ignore
 
 from app_debug import dlog as _dlog
@@ -24,14 +24,19 @@ if TYPE_CHECKING:
 
 SNAPSHOT_POSITIONS = [
     ("upskirt", "Upskirt Shot"), ("jogger", "Jogger Photo"), ("xray", "X-Ray Upskirt"),
-    ("xJogger", "X-Ray Jogger"), ("xBench", "X-Ray Bench"), ("xBar", "X-Ray Bar Photo"),
-    ("bench", "Bench Photo"), ("bar", "Bar Photo (Barstool)"), ("flasher", "Flasher"),
-    ("window", "Window"), ("angry", "Busted Photo"), ("police", "Police Upskirt"),
+    ("xJogger", "X-Ray Jogger"), ("xBench", "X-Ray Bench"),
+    ("xBar", "X-Ray Bar Photo (X-Ray Barstool)"),
+    ("bench", "Bench Photo"), ("bar", "Bar Photo (Barstool)"),
+    ("photoBooth", "Photo Booth"),
+    ("flasher", "Flasher (Yoruko Task)"), ("window", "Window (Yoruko Task)"),
+    ("angry", "Busted Photo"), ("police", "Police Upskirt"),
     ("xPolice", "Police X-ray Shot"), ("remote", "Signal Hijacker Upskirt"),
     ("rPolice", "Signal Hijacker Police"), ("rJogger", "Signal Hijacker Jogger"),
     ("rBench", "Signal Hijacker Bench"), ("event", "City Event Photo"),
     ("hypno", "Love Lens Photo"),
 ]
+
+_DISPLAY_SIZES = [("Standard", 48), ("Large", 80), ("Very Large", 120)]
 
 LEWD_POSITIONS = [
     ("beachBack", "Beach Back"), ("beachFront", "Beach Front"),
@@ -104,7 +109,7 @@ class PictureWidget(QWidget):
         root.setContentsMargins(4, 4, 4, 4)
         root.setSpacing(4)
 
-        # Compact toolbar — buttons sit left, count label sits right
+        # Compact toolbar — buttons sit left, size selector and count sit right
         toolbar = QHBoxLayout()
         toolbar.setSpacing(4)
         self._btn_add = QPushButton("Add…")
@@ -116,9 +121,16 @@ class PictureWidget(QWidget):
         self._btn_remove.clicked.connect(self._on_remove_selected)
         set_tip(self._btn_remove, "photo_remove")
         self._lbl_count = QLabel("0 images")
+        self._cmb_display_size = QComboBox()
+        for label, _ in _DISPLAY_SIZES:
+            self._cmb_display_size.addItem(label)
+        self._cmb_display_size.currentIndexChanged.connect(self._on_display_size_changed)
         toolbar.addWidget(self._btn_add)
         toolbar.addWidget(self._btn_remove)
         toolbar.addStretch()
+        toolbar.addWidget(QLabel("Size:"))
+        toolbar.addWidget(self._cmb_display_size)
+        toolbar.addSpacing(8)
         toolbar.addWidget(self._lbl_count)
         root.addLayout(toolbar)
 
@@ -126,11 +138,11 @@ class PictureWidget(QWidget):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         root.addWidget(splitter, 1)
 
-        # Photo list — narrow column
+        # Photo list — narrow column; supports multi-selection
         self._list = QListWidget()
         self._list.setMinimumWidth(160)
-        self._list.setMaximumWidth(280)
-        self._list.currentRowChanged.connect(self._on_selection_changed)
+        self._list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self._list.itemSelectionChanged.connect(self._on_selection_changed)
         splitter.addWidget(self._list)
 
         # Right panel
@@ -174,6 +186,10 @@ class PictureWidget(QWidget):
         form.addRow(self._chk_overwrite_color, self._edit_overwrite_color)
         form.addRow(self._lbl_hypno_type, self._cmb_hypno_type)
         form.addRow("", self._chk_thumbnail)
+
+        self._lbl_multi = QLabel("Thumbnail cannot be set for multiple images.")
+        self._lbl_multi.setVisible(False)
+        form.addRow("", self._lbl_multi)
 
         self._cmb_position.currentIndexChanged.connect(self._on_position_changed)
         self._cmb_position.currentIndexChanged.connect(self._on_trait_changed)
@@ -235,22 +251,32 @@ class PictureWidget(QWidget):
         _dlog("PictureWidget._on_add_images", f"Added {len(paths)} images")
 
     def _on_remove_selected(self) -> None:
-        row = self._list.currentRow()
-        if row < 0:
+        rows = sorted(
+            [self._list.row(item) for item in self._list.selectedItems()],
+            reverse=True,
+        )
+        if not rows:
             return
-        self._pm.remove_photo(row)
+        for row in rows:
+            self._pm.remove_photo(row)
         self._rebuild_list()
 
-    def _on_selection_changed(self, row: int) -> None:
+    def _on_selection_changed(self) -> None:
+        selected = self._list.selectedItems()
         photos: list = self._pm.data.get("photos", [])
-        if row < 0 or row >= len(photos):
+        if not selected:
             self._set_detail_enabled(False)
             self._preview_label.setText("No image selected")
             self._preview_label.setPixmap(QPixmap())
             return
-        self._set_detail_enabled(True)
+        row = self._list.row(selected[0])
+        if row < 0 or row >= len(photos):
+            self._set_detail_enabled(False)
+            return
+        multi = len(selected) > 1
+        self._set_detail_enabled(True, multi)
         self._load_detail(photos[row])
-        self._load_preview(photos[row].get("source"))
+        self._load_preview(photos[row].get("source") if not multi else None)
 
     def _on_position_changed(self) -> None:
         """Show/hide hypnoType row based on whether position==hypno."""
@@ -261,31 +287,47 @@ class PictureWidget(QWidget):
         self._cmb_hypno_type.setVisible(is_hypno)
 
     def _on_trait_changed(self) -> None:
-        row = self._list.currentRow()
+        selected_rows = [self._list.row(item) for item in self._list.selectedItems()]
         photos: list = self._pm.data.get("photos", [])
-        if row < 0 or row >= len(photos):
+        if not selected_rows:
             return
-        photo = photos[row]
-        pos_idx = self._cmb_position.currentIndex()
+
         positions = self._current_positions()
-        if 0 <= pos_idx < len(positions):
-            photo["position"] = positions[pos_idx][0]
+        pos_idx = self._cmb_position.currentIndex()
+        new_pos = positions[pos_idx][0] if 0 <= pos_idx < len(positions) else None
+
         types = self._current_types()
         t_idx = self._cmb_type.currentIndex()
-        if 0 <= t_idx < len(types):
-            photo["type"] = types[t_idx]
+        new_type = types[t_idx] if 0 <= t_idx < len(types) else None
+
         specials = self._current_specials()
         s_idx = self._cmb_color_special.currentIndex()
-        if 0 <= s_idx < len(specials):
-            photo["color"] = specials[s_idx]
+        new_special = specials[s_idx] if 0 <= s_idx < len(specials) else None
+
         ht = self._cmb_hypno_type.currentText()
-        if ht:
-            photo["hypnoType"] = ht
-        elif "hypnoType" in photo:
-            del photo["hypnoType"]
-        photo["overwrite_type"] = self._edit_overwrite_type.text() if self._chk_overwrite_type.isChecked() else ""
-        photo["overwrite_color"] = self._edit_overwrite_color.text() if self._chk_overwrite_color.isChecked() else ""
-        photo["thumbnail"] = self._chk_thumbnail.isChecked()
+        ow_type = self._edit_overwrite_type.text() if self._chk_overwrite_type.isChecked() else ""
+        ow_color = self._edit_overwrite_color.text() if self._chk_overwrite_color.isChecked() else ""
+
+        for row in selected_rows:
+            if row < 0 or row >= len(photos):
+                continue
+            photo = photos[row]
+            if new_pos is not None:
+                photo["position"] = new_pos
+            if new_type is not None:
+                photo["type"] = new_type
+            if new_special is not None:
+                photo["color"] = new_special
+            if ht:
+                photo["hypnoType"] = ht
+            elif "hypnoType" in photo:
+                del photo["hypnoType"]
+            photo["overwrite_type"] = ow_type
+            photo["overwrite_color"] = ow_color
+
+        # Thumbnail only applies when exactly one photo is selected
+        if len(selected_rows) == 1:
+            photos[selected_rows[0]]["thumbnail"] = self._chk_thumbnail.isChecked()
 
     # ── Helpers ───────────────────────────────────────────────────────────
 
@@ -364,23 +406,49 @@ class PictureWidget(QWidget):
                 f"Cannot preview:\n{os.path.basename(path)}" if path else "No preview"
             )
 
+    def _on_display_size_changed(self) -> None:
+        self._rebuild_list()
+
     def _rebuild_list(self) -> None:
+        size_idx = self._cmb_display_size.currentIndex()
+        _, icon_px = _DISPLAY_SIZES[size_idx]
+        icon_size = QSize(icon_px, icon_px)
+        self._list.setIconSize(icon_size)
+        if size_idx > 0:
+            self._list.setViewMode(QListWidget.ViewMode.IconMode)
+            self._list.setResizeMode(QListWidget.ResizeMode.Adjust)
+            self._list.setWrapping(True)
+            self._list.setWordWrap(True)
+            self._list.setSpacing(4)
+        else:
+            self._list.setViewMode(QListWidget.ViewMode.ListMode)
+            self._list.setWrapping(False)
         photos: list = self._pm.data.get("photos", [])
         self._list.clear()
         for photo in photos:
             label = os.path.basename(photo.get("source") or photo.get("name", ""))
-            self._list.addItem(label)
+            item = QListWidgetItem(label)
+            pix = load_pixmap(photo.get("source")) if photo.get("source") else QPixmap()
+            if not pix.isNull():
+                item.setIcon(QIcon(pix.scaled(
+                    icon_size,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )))
+            self._list.addItem(item)
         self._lbl_count.setText(f"{len(photos)} images")
 
-    def _set_detail_enabled(self, enabled: bool) -> None:
+    def _set_detail_enabled(self, enabled: bool, multi: bool = False) -> None:
         for w in (self._cmb_position, self._cmb_type, self._cmb_color_special,
                   self._chk_overwrite_type, self._edit_overwrite_type,
                   self._chk_overwrite_color, self._edit_overwrite_color,
-                  self._cmb_hypno_type, self._chk_thumbnail):
+                  self._cmb_hypno_type):
             w.setEnabled(enabled)
         if not enabled:
             self._lbl_hypno_type.setVisible(False)
             self._cmb_hypno_type.setVisible(False)
+        self._chk_thumbnail.setEnabled(enabled and not multi)
+        self._lbl_multi.setVisible(enabled and multi)
 
     def refresh(self) -> None:
         self._rebuild_list()

@@ -66,7 +66,7 @@ Call `set_tip(widget, key)` to attach a tooltip — this keeps tooltip text out 
 | Central `TIPS` registry; `set_tip(widget, key)` helper
 
 | `modules/picture_widget.py`
-| `PictureWidget` — photo list, per-image trait dropdowns, `hypnoType` for hypno position, preview
+| `PictureWidget` — photo list with `ExtendedSelection` (Ctrl/Shift-click multi-select); display-size combobox (Standard 48 px / Large 80 px / Very Large 120 px icon mode); per-image trait dropdowns; `hypnoType` for hypno position; thumbnail preview; bulk trait editing applies to all selected rows
 
 | `modules/overwrite_texts.py`
 | `OverwriteTextsWidget` — category label and Love Lens dialog texts

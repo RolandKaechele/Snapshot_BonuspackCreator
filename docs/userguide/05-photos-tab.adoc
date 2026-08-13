@@ -12,7 +12,39 @@ IMPORTANT: Regular photos and Love Lens result photos must be exactly 1024 × 10
 
 === Removing Images
 
-Select an image in the list and click *Remove*.
+Select one or more images in the list and click *Remove*.
+All selected images are removed at once.
+
+=== Selecting Multiple Images
+
+The photo list supports multi-selection:
+
+* Click a single item to select it.
+* Hold *Ctrl* and click to add or remove individual items from the selection.
+* Hold *Shift* and click to extend the selection to a range.
+
+When multiple images are selected the detail panel shows the traits of the *first* selected image.
+Changing Position, Type, Color/Special, Overwrite Type, or Overwrite Color/Special applies to *all* selected images at once.
+
+NOTE: *Use as Thumbnail* is disabled while more than one image is selected — it can only be set for a single image.
+
+=== Adjusting the List Display Size
+
+Use the *Size* drop-down in the toolbar to change how large the image cards appear in the list:
+
+[cols="1,2"]
+|===
+| Setting | Description
+
+| Standard
+| Compact text list (48 px icons)
+
+| Large
+| Icon grid with 80 px thumbnails
+
+| Very Large
+| Icon grid with 120 px thumbnails
+|===
 
 === Assigning Traits
 
@@ -23,7 +55,7 @@ Each image has:
 | Field | Purpose
 
 | Position
-| Where in the game this photo appears (upskirt, bench, event, hypno, etc.)
+| Where in the game this photo appears (upskirt, bench, photoBooth, event, hypno, etc.)
 
 | Type
 | The underwear / content type (plain, kinky, cum, etc.)
@@ -42,5 +74,6 @@ Mark *Use as Thumbnail* on exactly one image to set the pack preview icon.
 === Preview
 
 The right panel shows a scaled preview of the selected image.
+When multiple images are selected no preview is shown.
 
 TIP: Double-click the preview to open a full-resolution viewer where you can zoom in/out (buttons or Ctrl+Scroll) and open the file in the system default editor.
