@@ -7,11 +7,11 @@ from PyQt6.QtGui import QPixmap  # type: ignore
 
 from app_debug import dlog as _dlog
 
-# All extensions the game uses for image assets
-ASSET_EXTS: tuple[str, ...] = (".dat", ".jpa", ".pna", ".png", ".jpg", ".jpeg", ".bytes")
+# All extensions the game uses for image/video assets (.byte = MP4 video)
+ASSET_EXTS: tuple[str, ...] = (".dat", ".jpa", ".pna", ".png", ".jpg", ".jpeg", ".bytes", ".byte")
 
 # Ready-made filter string for QFileDialog
-ASSET_FILTER = "Images (*.png *.jpg *.jpeg *.dat *.jpa *.pna *.bytes)"
+ASSET_FILTER = "Images & Videos (*.png *.jpg *.jpeg *.dat *.jpa *.pna *.bytes *.byte)"
 
 
 def load_pixmap(path: str) -> QPixmap:

@@ -413,7 +413,7 @@ def _read_pack_ini(ini_path: str, folder: str) -> dict:
             if ev.get("type") in ("background", "overlay") and not ev.get("source"):
                 n = ev["name"]
                 for d in (os.path.join(folder, "Data"), folder):
-                    for ext in (".png", ".jpg", ".jpeg", ".mp4", ".bytes", ".dat"):
+                    for ext in (".png", ".jpg", ".jpeg", ".mp4", ".bytes", ".byte", ".dat"):
                         p = os.path.join(d, f"{n}{ext}")
                         if os.path.exists(p):
                             ev["source"] = p

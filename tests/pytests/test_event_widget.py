@@ -53,12 +53,15 @@ def test_write_then_extract_roundtrip():
     assert result[1]["vars"][0]["key"] == "endEvent"
 
 
-def test_write_sets_npc_player_counts():
+def test_write_sets_node_count():
     nodes = [_node(tag="Aya"), _node(tag="You"), _node(tag="Aya")]
     data = {}
     _write_nodes(data, nodes)
-    assert data["npcDiags"] == 2
-    assert data["playerDiags"] == 1
+    # _write_nodes serialises all nodes; verify all three are present by key
+    assert "nd_ID_0" in data
+    assert "nd_ID_1" in data
+    assert "nd_ID_2" in data
+    assert "nd_ID_3" not in data
 
 
 def test_write_clears_stale_nd_keys():

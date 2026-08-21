@@ -5,3 +5,4 @@ pytest-qt>=4.4.0
 scons>=4.7.0
 asciidoc>=10.2.0
 pyinstaller>=6.0.0
+unitypy>=1.25.3

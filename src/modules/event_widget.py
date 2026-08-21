@@ -9,28 +9,44 @@ from PyQt6.QtWidgets import (  # type: ignore
     QListWidget, QListWidgetItem, QFileDialog, QFormLayout,
     QComboBox, QTabWidget, QSplitter, QPlainTextEdit, QLineEdit,
     QScrollArea, QTableWidget, QTableWidgetItem, QHeaderView,
-    QAbstractItemView, QStyledItemDelegate,
+    QAbstractItemView, QStyledItemDelegate, QStackedWidget,
+    QSpinBox, QGroupBox, QCheckBox, QFrame,
 )
 from PyQt6.QtGui import QPalette  # type: ignore
 from PyQt6.QtCore import Qt  # type: ignore
 
 from app_debug import dlog as _dlog
+from modules.dialog_graph import DialogGraphWidget, DialogGraphWindow
+from modules.dialog_player import DialogPlayerWindow
 from modules.image_utils import ASSET_FILTER, load_pixmap, resolve_asset
 from modules.tooltips import set_tip, tip
+from modules.video_widget import VideoPreviewWidget, is_video_file
 from ui.image_viewer import attach_viewer
 
 if TYPE_CHECKING:
     from modules.pack_manager import PackManager
 
-_KNOWN_TAGS = ["", "SKIP", "You", "Aya", "Boy", "Girl", "Guy", "Old Man", "Punk Guy", "Store Owner"]
-_KNOWN_CMDS = [
-    "", "showImage", "noImage", "showEventPhoto", "noPhoto",
-    "noOverlayImage", "mod_overlayImage3", "endEvent",
-    "playSound", "stopLoopedSound", "pulseBackground",
-    "mascotMoan1", "mascotMoan2", "suckLoop", "mod_addEventSellablePhoto",
+_KNOWN_TAGS = [
+    "", "SKIP", "You", "Aya", "Boy", "Girl", "Guy",
+    "Old Man", "Punk Guy", "Store Owner",
+    "Schoolgirl", "Teacher", "Trio",
 ]
-# Commands whose Argument is an image asset name
-_IMAGE_CMDS = {"showImage", "showEventPhoto", "mod_overlayImage3", "mod_addEventSellablePhoto"}
+_KNOWN_CMDS = [
+    "",
+    "showImage", "noImage",
+    "mod_showImage", "hideUI", "showUI",
+    "showEventPhoto", "noPhoto",
+    "noOverlayImage", "mod_overlayImage3",
+    "endEvent",
+    "playSound", "stopLoopedSound", "pulseBackground",
+    "alleyAmbience",
+    "mascotMoan1", "mascotMoan2", "suckLoop",
+    "mod_addEventSellablePhoto",
+]
+
+
+# Commands whose Argument is an image/video asset name
+_IMAGE_CMDS = {"showImage", "mod_showImage", "showEventPhoto", "mod_overlayImage3", "mod_addEventSellablePhoto"}
 
 
 def _paint_as_combo(delegate, painter, option, index):
@@ -42,6 +58,50 @@ def _paint_as_combo(delegate, painter, option, index):
     painter.drawText(r.right() - 18, r.top(), 18, r.height(),
                      Qt.AlignmentFlag.AlignCenter, "\u25be")
     painter.restore()
+
+
+class _NodeComboDelegate(QStyledItemDelegate):
+    """Combo-box editor for nd_ index cells in the player-choice table."""
+
+    def __init__(self, node_getter, parent=None):
+        super().__init__(parent)
+        self._get_nodes = node_getter
+
+    def createEditor(self, parent, option, index):
+        c = QComboBox(parent)
+        c.addItem("-1  (none)", -1)
+        for i, node in enumerate(self._get_nodes()):
+            c.addItem(_node_label(i, node), i)
+        return c
+
+    def setEditorData(self, editor, index):
+        try:
+            val = int(index.data() or -1)
+        except ValueError:
+            val = -1
+        i = editor.findData(val)
+        editor.setCurrentIndex(max(i, 0))
+
+    def setModelData(self, editor, model, index):
+        model.setData(index, str(editor.currentData()))
+
+    def displayText(self, value, locale):
+        try:
+            n = int(value)
+        except (ValueError, TypeError):
+            return str(value)
+        if n < 0:
+            return "(none)"
+        nodes = self._get_nodes()
+        if 0 <= n < len(nodes):
+            node = nodes[n]
+            tag  = node.get("tag", "")
+            text = (node.get("text") or "")[:30]
+            return f"#{n}  {('[' + tag + ']') if tag else ''}  {text}"
+        return f"#{n}"
+
+    def paint(self, painter, option, index):
+        _paint_as_combo(self, painter, option, index)
 
 
 class _ArgDelegate(QStyledItemDelegate):
@@ -87,6 +147,34 @@ class _CmdDelegate(QStyledItemDelegate):
         _paint_as_combo(self, painter, option, index)
 
 
+def _extract_pd_choices(data: dict) -> list:
+    """Extract player-dialog choice containers from pd_* keys (full roundtrip)."""
+    choices = []
+    i = 0
+    while f"pd_ID_{i}" in data:
+        n_coms = data.get(f"pd_comSize_{i}", 0)
+        coms = [
+            {
+                "text":   data.get(f"pd_{i}_com_{j}text", ""),
+                "oAns":   data.get(f"pd_{i}_com_{j}oAns", -1),
+                "oAct":   data.get(f"pd_{i}_com_{j}oAct", -1),
+                "iSet":   data.get(f"pd_{i}_com_{j}iSet", i),
+                "extraD": data.get(f"pd_{i}_com_{j}extraD", ""),
+            }
+            for j in range(n_coms)
+        ]
+        choices.append({
+            "pd_id":  data.get(f"pd_ID_{i}", i),
+            "pTag":   data.get(f"pd_pTag_{i}", ""),
+            "rect":   data.get(f"pd_rect_{i}", [0, 0]),
+            "expand": data.get(f"pd_expand_{i}", True),
+            "vars":   data.get(f"pd_vars{i}", 0),
+            "coms":   coms,
+        })
+        i += 1
+    return choices
+
+
 def _extract_nodes(data: dict) -> list:
     """Parse flat nd_* keys from a dialog JSON dict into a list of node dicts."""
     nodes = []
@@ -98,6 +186,7 @@ def _extract_nodes(data: dict) -> list:
             for k in range(n_vars)
         ]
         nodes.append({
+            "nd_id":     data.get(f"nd_ID_{i}", i),
             "tag":       data.get(f"nd_tag_{i}", ""),
             "text":      data.get(f"nd_text_{i}", ""),
             "extraData": data.get(f"nd_extraData_{i}", ""),
@@ -117,7 +206,7 @@ def _write_nodes(data: dict, nodes: list) -> None:
     for k in [k for k in list(data.keys()) if k.startswith("nd_")]:
         del data[k]
     for i, node in enumerate(nodes):
-        data[f"nd_ID_{i}"]        = i
+        data[f"nd_ID_{i}"]        = node.get("nd_id", i)
         data[f"nd_tag_{i}"]       = node.get("tag", "")
         data[f"nd_text_{i}"]      = node.get("text", "")
         data[f"nd_extraData_{i}"] = node.get("extraData", "")
@@ -131,8 +220,44 @@ def _write_nodes(data: dict, nodes: list) -> None:
         for k, v in enumerate(vs):
             data[f"nd_varKey_{i}_{k}"] = v.get("key", "")
             data[f"nd_var_{i}_{k}"]    = v.get("val", "")
-    data["npcDiags"]    = sum(1 for n in nodes if n.get("tag", "") != "You")
-    data["playerDiags"] = sum(1 for n in nodes if n.get("tag", "") == "You")
+
+
+def _write_pd_choices(data: dict, choices: list) -> None:
+    """Replace all pd_* keys in *data* with the serialised choice containers."""
+    for k in [k for k in list(data.keys()) if k.startswith("pd_")]:
+        del data[k]
+    for i, c in enumerate(choices):
+        data[f"pd_ID_{i}"]      = c.get("pd_id", i)
+        data[f"pd_pTag_{i}"]    = c.get("pTag", "")
+        data[f"pd_rect_{i}"]    = c.get("rect", [0, 0])
+        data[f"pd_expand_{i}"]  = c.get("expand", True)
+        data[f"pd_vars{i}"]     = 0
+        coms = c.get("coms", [])
+        data[f"pd_comSize_{i}"] = len(coms)
+        for j, com in enumerate(coms):
+            data[f"pd_{i}_com_{j}iSet"]   = com.get("iSet", i)
+            data[f"pd_{i}_com_{j}oAns"]   = com.get("oAns", -1)
+            data[f"pd_{i}_com_{j}oAct"]   = com.get("oAct", -1)
+            data[f"pd_{i}_com_{j}text"]   = com.get("text", "")
+            data[f"pd_{i}_com_{j}extraD"] = com.get("extraD", "")
+
+
+def _extract_dlg_meta(data: dict) -> dict:
+    """Read top-level dialog metadata fields."""
+    return {
+        "dID":            data.get("dID", 0),
+        "startPoint":     data.get("startPoint", 0),
+        "loadTag":        data.get("loadTag", ""),
+        "previewPanning": data.get("previewPanning", False),
+        "showSettings":   data.get("showSettings", True),
+    }
+
+
+def _write_dlg_meta(data: dict, meta: dict) -> None:
+    """Write top-level dialog metadata back without touching nd_* or pd_* keys."""
+    for k in ("dID", "startPoint", "loadTag", "previewPanning", "showSettings"):
+        if k in meta:
+            data[k] = meta[k]
 
 
 def _remap_refs(nodes: list, remap: dict) -> None:
@@ -197,6 +322,8 @@ class EventWidget(QWidget):
         self._pm = pack_manager
         self._loading = False
         self._current_nodes: list = []
+        self._current_pd_choices: list = []
+        self._current_dlg_meta: dict = {}
         self._current_dlg_row: int = -1
         self._build_ui()
 
@@ -258,11 +385,19 @@ class EventWidget(QWidget):
         ev_list.setMaximumWidth(320)
         splitter.addWidget(ev_list)
 
+        # Stacked widget: index 0 = image label, index 1 = video info panel
+        preview_stack = QStackedWidget()
+        preview_stack.setStyleSheet("background:#1a1a1a;")
+
         preview = QLabel()
         preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview.setText("No preview")
-        preview.setStyleSheet("background:#1a1a1a;")
-        splitter.addWidget(preview)
+        preview_stack.addWidget(preview)   # index 0
+
+        video_preview = VideoPreviewWidget()
+        preview_stack.addWidget(video_preview)  # index 1
+
+        splitter.addWidget(preview_stack)
         splitter.setSizes([220, 300])
 
         cur_path: list = [""]
@@ -271,12 +406,21 @@ class EventWidget(QWidget):
 
         def _load_preview(path: str) -> None:
             cur_path[0] = path
+            if path and is_video_file(path):
+                video_preview.set_path(path)
+                preview_stack.setCurrentIndex(1)
+                return
+            preview_stack.setCurrentIndex(0)
+            if not path:
+                preview.clear()
+                preview.setText("No preview")
+                return
             px = load_pixmap(path)
             if px.isNull():
                 preview.clear()
                 preview.setText(
                     f"Cannot preview:\n{os.path.basename(path)}"
-                    if path and os.path.exists(path) else "No preview"
+                    if os.path.exists(path) else "No preview"
                 )
                 return
             w = max(preview.width(), 240)
@@ -292,7 +436,7 @@ class EventWidget(QWidget):
 
         def _on_resize(ev):
             _orig_resize(ev)
-            if cur_path[0]:
+            if cur_path[0] and preview_stack.currentIndex() == 0:
                 _load_preview(cur_path[0])
 
         preview.resizeEvent = _on_resize
@@ -301,6 +445,7 @@ class EventWidget(QWidget):
             if row < 0 or row >= ev_list.count():
                 preview.clear()
                 preview.setText("No preview")
+                preview_stack.setCurrentIndex(0)
                 return
             _load_preview(ev_list.item(row).data(Qt.ItemDataRole.UserRole) or "")
 
@@ -369,21 +514,37 @@ class EventWidget(QWidget):
         btn_scene_add.setFixedWidth(90)
         btn_scene_rem = QPushButton("Remove")
         btn_scene_rem.setFixedWidth(70)
+        self._btn_graph_toggle = QPushButton("Graph View")
+        self._btn_graph_toggle.setFixedWidth(88)
+        self._btn_graph_toggle.setCheckable(True)
+        self._btn_graph_toggle.setToolTip(
+            "Switch between linear list view and visual node graph canvas")
+        btn_test = QPushButton("Test…")
+        btn_test.setFixedWidth(60)
+        self._btn_test = btn_test
+        btn_test.setToolTip(
+            "Open interactive playback window — step through dialog nodes")
         scene_toolbar.addWidget(btn_scene_add)
         scene_toolbar.addWidget(btn_scene_rem)
+        scene_toolbar.addSpacing(12)
+        scene_toolbar.addWidget(self._btn_graph_toggle)
+        scene_toolbar.addWidget(btn_test)
         scene_toolbar.addStretch()
         layout.addLayout(scene_toolbar)
 
         outer_split = QSplitter(Qt.Orientation.Horizontal)
+        outer_split.setChildrenCollapsible(False)
         layout.addWidget(outer_split, 1)
 
         # Left: dialog scene list
         self._dlg_list = QListWidget()
-        self._dlg_list.setMinimumWidth(130)
-        self._dlg_list.setMaximumWidth(230)
         outer_split.addWidget(self._dlg_list)
 
-        # Middle: node list + its own toolbar
+        # Middle: QStackedWidget — index 0 = node list  (graph lives in its own window)
+        self._dlg_middle_stack = QStackedWidget()
+        outer_split.addWidget(self._dlg_middle_stack)
+
+        # ── index 0: node list + toolbar ─────────────────────────────────
         node_panel = QWidget()
         node_layout = QVBoxLayout(node_panel)
         node_layout.setContentsMargins(0, 0, 0, 0)
@@ -412,10 +573,11 @@ class EventWidget(QWidget):
         node_layout.addLayout(node_toolbar)
 
         self._node_list = QListWidget()
-        self._node_list.setMinimumWidth(160)
-        self._node_list.setMaximumWidth(320)
+        self._node_list.setMinimumWidth(120)
         node_layout.addWidget(self._node_list, 1)
-        outer_split.addWidget(node_panel)
+        self._dlg_middle_stack.addWidget(node_panel)  # index 0
+
+        # Graph lives in a separate window; no index 1 needed here
 
         # Right: node property form
         form_scroll = QScrollArea()
@@ -424,6 +586,37 @@ class EventWidget(QWidget):
         form_layout = QFormLayout(form_inner)
         form_layout.setContentsMargins(8, 8, 8, 8)
         form_layout.setSpacing(6)
+
+        # Scene-level settings (node-independent); shown/hidden by _on_dialog_selected
+        self._meta_box = QGroupBox("Scene Settings")
+        self._meta_box.setStyleSheet(
+            "QGroupBox { font-size:10px; border:1px solid #444; margin-top:6px; }"
+            "QGroupBox::title { subcontrol-origin:margin; left:8px; }")
+        meta_form = QFormLayout(self._meta_box)
+        meta_form.setContentsMargins(6, 12, 6, 4)
+        meta_form.setSpacing(4)
+        self._spin_start = QSpinBox()
+        self._spin_start.setRange(0, 9999)
+        self._spin_start.setToolTip("startPoint — nd_ array index shown first when the event starts")
+        meta_form.addRow("Start Node:", self._spin_start)
+        self._edit_loadtag = QLineEdit()
+        self._edit_loadtag.setToolTip("loadTag — internal identifier used when loading this dialog")
+        meta_form.addRow("Load Tag:", self._edit_loadtag)
+        _meta_flags = QHBoxLayout()
+        self._chk_panning = QCheckBox("Preview Panning")
+        self._chk_panning.setToolTip("previewPanning")
+        self._chk_settings = QCheckBox("Show Settings")
+        self._chk_settings.setToolTip("showSettings")
+        _meta_flags.addWidget(self._chk_panning)
+        _meta_flags.addWidget(self._chk_settings)
+        _meta_flags.addStretch()
+        meta_form.addRow(_meta_flags)
+        form_layout.addRow(self._meta_box)
+        self._meta_box.hide()
+        self._spin_start.valueChanged.connect(self._save_meta_form)
+        self._edit_loadtag.textChanged.connect(self._save_meta_form)
+        self._chk_panning.toggled.connect(self._save_meta_form)
+        self._chk_settings.toggled.connect(self._save_meta_form)
 
         self._cmb_tag = QComboBox()
         self._cmb_tag.setEditable(True)
@@ -452,6 +645,82 @@ class EventWidget(QWidget):
             cmb.setToolTip(tip(tt_key))
             form_layout.addRow(label, cmb)
             self._flow_combos[field] = cmb
+
+        # Player Choice Sets (pd_) — shown when current node has oSet >= 0
+        self._pd_box = QGroupBox("Player Choice Sets  (pd_)")
+        self._pd_box.setStyleSheet(
+            "QGroupBox { font-size:10px; border:1px solid #444; margin-top:6px; }"
+            "QGroupBox::title { subcontrol-origin:margin; left:8px; }")
+        _pd_layout = QVBoxLayout(self._pd_box)
+        _pd_layout.setContentsMargins(6, 12, 6, 4)
+        _pd_layout.setSpacing(4)
+
+        _pd_set_row = QHBoxLayout()
+        _pd_set_row.addWidget(QLabel("Set:"))
+        self._cmb_pd_set = QComboBox()
+        self._cmb_pd_set.setMinimumWidth(120)
+        _pd_set_row.addWidget(self._cmb_pd_set, 1)
+        _btn_pd_add_set = QPushButton("+")
+        _btn_pd_add_set.setFixedSize(26, 26)
+        _btn_pd_add_set.setToolTip("Add a new player-choice container (pd_ set)")
+        _btn_pd_rem_set = QPushButton("−")
+        _btn_pd_rem_set.setFixedSize(26, 26)
+        _btn_pd_rem_set.setToolTip("Remove the selected pd_ container")
+        _pd_set_row.addWidget(_btn_pd_add_set)
+        _pd_set_row.addWidget(_btn_pd_rem_set)
+        _pd_layout.addLayout(_pd_set_row)
+
+        _pd_tag_row = QHBoxLayout()
+        _pd_tag_lbl = QLabel("Player Tag:")
+        _pd_tag_lbl.setFixedWidth(72)
+        self._edit_pd_ptag = QLineEdit()
+        self._edit_pd_ptag.setPlaceholderText("(empty)")
+        self._edit_pd_ptag.setToolTip("pd_pTag — speaker tag for player choices in this set")
+        _pd_tag_row.addWidget(_pd_tag_lbl)
+        _pd_tag_row.addWidget(self._edit_pd_ptag, 1)
+        _pd_layout.addLayout(_pd_tag_row)
+
+        self._pd_table = QTableWidget(0, 3)
+        self._pd_table.setHorizontalHeaderLabels(["Choice Text", "→ Node (oAns)", "→ Action (oAct)"])
+        self._pd_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self._pd_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.ResizeToContents)
+        self._pd_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.ResizeToContents)
+        self._pd_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._pd_table.setMinimumHeight(80)
+        _nd_delegate = _NodeComboDelegate(lambda: self._current_nodes, self._pd_table)
+        self._pd_table.setItemDelegateForColumn(1, _nd_delegate)
+        self._pd_table.setItemDelegateForColumn(2, _nd_delegate)
+        _pd_layout.addWidget(self._pd_table)
+
+        _pd_choice_row = QHBoxLayout()
+        _btn_pd_add_choice = QPushButton("Add Choice")
+        _btn_pd_add_choice.setFixedWidth(88)
+        _btn_pd_rem_choice = QPushButton("Remove Choice")
+        _btn_pd_rem_choice.setFixedWidth(102)
+        _pd_choice_row.addWidget(_btn_pd_add_choice)
+        _pd_choice_row.addWidget(_btn_pd_rem_choice)
+        _pd_choice_row.addStretch()
+        _pd_layout.addLayout(_pd_choice_row)
+
+        form_layout.addRow(self._pd_box)
+        self._pd_box.hide()
+
+        self._btn_attach_pd = QPushButton("+ Attach Player Choice Set")
+        self._btn_attach_pd.setToolTip(
+            "Create a new pd_ container and link this node to it via oSet.")
+        self._btn_attach_pd.hide()
+        self._btn_attach_pd.clicked.connect(self._on_attach_pd_set)
+        form_layout.addRow(self._btn_attach_pd)
+
+        self._cmb_pd_set.currentIndexChanged.connect(self._on_pd_set_selected)
+        self._edit_pd_ptag.textChanged.connect(self._save_pd_form)
+        self._pd_table.cellChanged.connect(self._save_pd_form)
+        _btn_pd_add_set.clicked.connect(self._on_pd_set_add)
+        _btn_pd_rem_set.clicked.connect(self._on_pd_set_rem)
+        _btn_pd_add_choice.clicked.connect(self._on_pd_choice_add)
+        _btn_pd_rem_choice.clicked.connect(self._on_pd_choice_rem)
 
         # Variables (command/argument pairs)
         var_hdr = QHBoxLayout()
@@ -491,18 +760,31 @@ class EventWidget(QWidget):
         self._var_table.setToolTip(tip("nd_vars"))
         form_layout.addRow(self._var_table)
 
+        self._cmd_preview_stack = QStackedWidget()
+        self._cmd_preview_stack.setMinimumHeight(80)
+        self._cmd_preview_stack.setMaximumHeight(160)
+        self._cmd_preview_stack.setStyleSheet("background:#1a1a1a;")
+
         self._cmd_preview = QLabel()
         self._cmd_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._cmd_preview.setMinimumHeight(80)
-        self._cmd_preview.setMaximumHeight(130)
-        self._cmd_preview.setStyleSheet("background:#1a1a1a;")
         self._cmd_preview_path: str = ""
         attach_viewer(self._cmd_preview, lambda: self._cmd_preview_path)
-        form_layout.addRow(self._cmd_preview)
+        self._cmd_preview_stack.addWidget(self._cmd_preview)   # index 0
+
+        self._cmd_video_preview = VideoPreviewWidget()
+        self._cmd_preview_stack.addWidget(self._cmd_video_preview)  # index 1
+
+        form_layout.addRow(self._cmd_preview_stack)
 
         form_scroll.setWidget(form_inner)
         outer_split.addWidget(form_scroll)
-        outer_split.setSizes([170, 240, 380])
+        outer_split.setSizes([130, 320, 550])
+
+        self._dlg_graph_win: DialogGraphWindow | None = None
+        self._dlg_player_win: DialogPlayerWindow | None = None
+
+        self._btn_graph_toggle.setEnabled(False)
+        self._btn_test.setEnabled(False)
 
         # Wire signals
         self._dlg_list.currentRowChanged.connect(self._on_dialog_selected)
@@ -514,6 +796,54 @@ class EventWidget(QWidget):
             cmb.currentIndexChanged.connect(self._save_node_form)
         self._var_table.cellChanged.connect(self._save_node_form)
         self._var_table.currentCellChanged.connect(self._on_var_row_selected)
+
+        # Graph view toggle — opens / raises the floating window
+        def _on_graph_toggle(checked: bool) -> None:
+            if checked:
+                if self._dlg_graph_win is None:
+                    self._dlg_graph_win = DialogGraphWindow(self.window())
+                    self._dlg_graph_win.node_selected.connect(
+                        self._on_graph_node_selected)
+                    # uncheck button when window is closed by the user
+                    self._dlg_graph_win.finished.connect(
+                        lambda: self._btn_graph_toggle.setChecked(False))
+                dlg_name = ""
+                dlgs = [e for e in self._pm.data.get("events", [])
+                        if e.get("type") == "dialog"]
+                if 0 <= self._current_dlg_row < len(dlgs):
+                    dlg_name = dlgs[self._current_dlg_row].get("name", "")
+                self._dlg_graph_win.load(self._current_nodes, dlg_name)
+                sel = self._node_list.currentRow()
+                if sel >= 0:
+                    self._dlg_graph_win.highlight_node(sel)
+                self._dlg_graph_win.show()
+                self._dlg_graph_win.raise_()
+                self._dlg_graph_win.activateWindow()
+            else:
+                if self._dlg_graph_win:
+                    self._dlg_graph_win.hide()
+
+        self._btn_graph_toggle.toggled.connect(_on_graph_toggle)
+
+        def _on_test() -> None:
+            if not self._current_nodes:
+                return
+            if self._dlg_player_win is None:
+                self._dlg_player_win = DialogPlayerWindow(self.window())
+            dlgs = [e for e in self._pm.data.get("events", [])
+                    if e.get("type") == "dialog"]
+            dlg_name = ""
+            if 0 <= self._current_dlg_row < len(dlgs):
+                dlg_name = dlgs[self._current_dlg_row].get("name", "")
+            start = max(self._node_list.currentRow(), 0)
+            self._dlg_player_win.load(
+                self._current_nodes, dlg_name, start,
+                self._resolve_pack_folder(), self._current_pd_choices)
+            self._dlg_player_win.show()
+            self._dlg_player_win.raise_()
+            self._dlg_player_win.activateWindow()
+
+        btn_test.clicked.connect(_on_test)
 
         def _on_scene_add() -> None:
             paths, _ = QFileDialog.getOpenFileNames(
@@ -605,20 +935,20 @@ class EventWidget(QWidget):
     def _get_arg_options(self, cmd: str) -> list:
         """Return candidate argument values for the given command."""
         events = self._pm.data.get("events", [])
-        if cmd == "showImage":
+        if cmd in ("showImage", "mod_showImage"):
             return [""] + [e.get("name", "") for e in events
                            if e.get("type") == "background" and e.get("name")]
         if cmd in ("showEventPhoto", "mod_addEventSellablePhoto"):
-            # Dialog stem names match the event photo files (e.g. Event_00024_)
             return [""] + [e.get("name", "") for e in events
                            if e.get("type") == "dialog" and e.get("name")]
         if cmd == "mod_overlayImage3":
             names = []
             data_dir = os.path.join(self._resolve_pack_folder(), "Data")
             if os.path.isdir(data_dir):
+                _video_exts = (".dat", ".jpa", ".pna", ".png", ".byte", ".bytes")
                 for f in sorted(os.listdir(data_dir)):
                     stem, ext = os.path.splitext(f)
-                    if "overlay" in stem.lower() and ext.lower() in (".dat", ".jpa", ".pna", ".png"):
+                    if "overlay" in stem.lower() and ext.lower() in _video_exts:
                         names.append(stem)
             if not names:
                 names = [e.get("name", "") for e in events
@@ -650,6 +980,8 @@ class EventWidget(QWidget):
         if row < 0:
             self._btn_cmd_browse.setEnabled(False)
             self._cmd_preview.clear()
+            self._cmd_video_preview.clear()
+            self._cmd_preview_stack.setCurrentIndex(0)
             return
         cmd_item = self._var_table.item(row, 0)
         cmd = cmd_item.text() if cmd_item else ""
@@ -660,6 +992,8 @@ class EventWidget(QWidget):
             self._refresh_cmd_preview(arg_item.text() if arg_item else "")
         else:
             self._cmd_preview.clear()
+            self._cmd_video_preview.clear()
+            self._cmd_preview_stack.setCurrentIndex(0)
 
     def _refresh_cmd_preview(self, name: str) -> None:
         pack_folder = self._resolve_pack_folder()
@@ -667,6 +1001,12 @@ class EventWidget(QWidget):
         if not path and name and os.path.isfile(name):
             path = name
         self._cmd_preview_path = path
+        if path and is_video_file(path):
+            self._cmd_video_preview.set_path(path)
+            self._cmd_preview_stack.setCurrentIndex(1)
+            return
+        self._cmd_preview_stack.setCurrentIndex(0)
+        self._cmd_video_preview.clear()
         if not path:
             self._cmd_preview.setText(f"No preview: {name}" if name else "")
             return
@@ -675,7 +1015,7 @@ class EventWidget(QWidget):
             self._cmd_preview.setText(f"No preview: {name}")
             return
         w = max(self._cmd_preview.width(), 160)
-        h = self._cmd_preview.maximumHeight()
+        h = self._cmd_preview_stack.maximumHeight()
         self._cmd_preview.setText("")
         self._cmd_preview.setPixmap(px.scaled(
             w, h,
@@ -737,19 +1077,44 @@ class EventWidget(QWidget):
 
     def _on_dialog_selected(self, row: int) -> None:
         self._current_nodes = []
+        self._current_pd_choices = []
+        self._current_dlg_meta = {}
         self._current_dlg_row = row
         self._node_list.clear()
+        self._meta_box.hide()
+        self._pd_box.hide()
         dlgs = [e for e in self._pm.data.get("events", []) if e.get("type") == "dialog"]
-        if row < 0 or row >= len(dlgs):
+        has_selection = 0 <= row < len(dlgs)
+        self._btn_graph_toggle.setEnabled(has_selection)
+        self._btn_test.setEnabled(has_selection)
+        if not has_selection:
+            if self._dlg_graph_win:
+                self._dlg_graph_win.load([], "")
             return
         content = dlgs[row].get("content", "")
         try:
             data = json.loads(content) if content.strip() else {}
         except json.JSONDecodeError:
             self._node_list.addItem("(invalid JSON)")
+            if self._dlg_graph_win:
+                self._dlg_graph_win.load([], "")
             return
-        self._current_nodes = _extract_nodes(data)
+        self._current_nodes      = _extract_nodes(data)
+        self._current_pd_choices = _extract_pd_choices(data)
+        self._current_dlg_meta   = _extract_dlg_meta(data)
+        self._loading = True
+        self._spin_start.setValue(self._current_dlg_meta.get("startPoint", 0))
+        self._spin_start.setMaximum(max(len(self._current_nodes) - 1, 0))
+        self._edit_loadtag.setText(self._current_dlg_meta.get("loadTag", ""))
+        self._chk_panning.setChecked(self._current_dlg_meta.get("previewPanning", False))
+        self._chk_settings.setChecked(self._current_dlg_meta.get("showSettings", True))
+        self._loading = False
+        self._meta_box.show()
         self._rebuild_node_list()
+        self._rebuild_pd_ui()
+        if self._dlg_graph_win and self._dlg_graph_win.isVisible():
+            dlg_name = dlgs[row].get("name", "") if row < len(dlgs) else ""
+            self._dlg_graph_win.load(self._current_nodes, dlg_name)
 
     def _rebuild_node_list(self, keep_row: int = -1) -> None:
         self._node_list.clear()
@@ -762,8 +1127,19 @@ class EventWidget(QWidget):
         if keep_row >= 0 and keep_row < self._node_list.count():
             self._node_list.setCurrentRow(keep_row)
 
+    def _on_graph_node_selected(self, idx: int) -> None:
+        """Called when user clicks a node in the graph canvas."""
+        self._loading = True
+        self._node_list.blockSignals(True)
+        self._node_list.setCurrentRow(idx)
+        self._node_list.blockSignals(False)
+        self._loading = False
+        self._on_node_selected(idx)
+
     def _on_node_selected(self, row: int) -> None:
         if row < 0 or row >= len(self._current_nodes):
+            self._pd_box.hide()
+            self._btn_attach_pd.hide()
             return
         node = self._current_nodes[row]
         self._loading = True
@@ -780,6 +1156,20 @@ class EventWidget(QWidget):
             self._var_table.insertRow(r)
             self._var_table.setItem(r, 0, QTableWidgetItem(v.get("key", "")))
             self._var_table.setItem(r, 1, QTableWidgetItem(str(v.get("val", ""))))
+        # Show pd_ container only when this node triggers a player choice
+        oSet = node.get("oSet", -1)
+        if 0 <= oSet < len(self._current_pd_choices):
+            combo_idx = self._cmb_pd_set.findData(oSet)
+            if combo_idx >= 0:
+                self._cmb_pd_set.blockSignals(True)
+                self._cmb_pd_set.setCurrentIndex(combo_idx)
+                self._cmb_pd_set.blockSignals(False)
+                self._on_pd_set_selected(combo_idx)
+            self._pd_box.show()
+            self._btn_attach_pd.hide()
+        else:
+            self._pd_box.hide()
+            self._btn_attach_pd.setVisible(self._current_dlg_row >= 0)
         self._loading = False
 
     def _save_node_form(self) -> None:
@@ -804,9 +1194,13 @@ class EventWidget(QWidget):
         ]
         self._serialize_dialog()
         self._node_list.item(row).setText(_node_label(row, node))
+        # Refresh edges and highlight in graph window if open
+        if self._dlg_graph_win and self._dlg_graph_win.isVisible():
+            self._dlg_graph_win.refresh_edges()
+            self._dlg_graph_win.highlight_node(row)
 
     def _serialize_dialog(self) -> None:
-        """Flush _current_nodes back into the selected dialog event's JSON content."""
+        """Flush all dialog state back into the selected dialog event's JSON content."""
         if self._current_dlg_row < 0:
             return
         dlgs = [e for e in self._pm.data.get("events", []) if e.get("type") == "dialog"]
@@ -817,8 +1211,143 @@ class EventWidget(QWidget):
             data = json.loads(ev.get("content", "{}"))
         except json.JSONDecodeError:
             data = {}
+        _write_dlg_meta(data, self._current_dlg_meta)
+        _write_pd_choices(data, self._current_pd_choices)
         _write_nodes(data, self._current_nodes)
+        data["npcDiags"]    = len(self._current_nodes)
+        data["playerDiags"] = len(self._current_pd_choices)
+        data["actionNodes"] = 0
         ev["content"] = json.dumps(data, ensure_ascii=False, indent=2)
+
+    # ── Metadata and pd_ form helpers ─────────────────────────────────────
+
+    def _save_meta_form(self) -> None:
+        if self._loading or self._current_dlg_row < 0:
+            return
+        self._current_dlg_meta["startPoint"]     = self._spin_start.value()
+        self._current_dlg_meta["loadTag"]         = self._edit_loadtag.text()
+        self._current_dlg_meta["previewPanning"]  = self._chk_panning.isChecked()
+        self._current_dlg_meta["showSettings"]    = self._chk_settings.isChecked()
+        self._serialize_dialog()
+
+    def _rebuild_pd_ui(self) -> None:
+        """Repopulate the pd_ container selector from _current_pd_choices."""
+        self._cmb_pd_set.blockSignals(True)
+        self._cmb_pd_set.clear()
+        for i, c in enumerate(self._current_pd_choices):
+            self._cmb_pd_set.addItem(f"Set {i}  (pd_id={c.get('pd_id', i)})", i)
+        self._cmb_pd_set.blockSignals(False)
+        if self._current_pd_choices:
+            self._cmb_pd_set.setCurrentIndex(0)
+            self._on_pd_set_selected(0)
+        else:
+            self._pd_table.setRowCount(0)
+            self._edit_pd_ptag.blockSignals(True)
+            self._edit_pd_ptag.setText("")
+            self._edit_pd_ptag.blockSignals(False)
+        # pd_box visibility is controlled per-node in _on_node_selected
+
+    def _on_pd_set_selected(self, combo_idx: int) -> None:
+        if combo_idx < 0 or combo_idx >= len(self._current_pd_choices):
+            self._pd_table.setRowCount(0)
+            return
+        c = self._current_pd_choices[combo_idx]
+        self._loading = True
+        self._edit_pd_ptag.setText(c.get("pTag", ""))
+        self._pd_table.setRowCount(0)
+        for com in c.get("coms", []):
+            r = self._pd_table.rowCount()
+            self._pd_table.insertRow(r)
+            self._pd_table.setItem(r, 0, QTableWidgetItem(com.get("text", "")))
+            self._pd_table.setItem(r, 1, QTableWidgetItem(str(com.get("oAns", -1))))
+            self._pd_table.setItem(r, 2, QTableWidgetItem(str(com.get("oAct", -1))))
+        self._loading = False
+
+    def _save_pd_form(self) -> None:
+        if self._loading or self._current_dlg_row < 0:
+            return
+        idx = self._cmb_pd_set.currentData()
+        if idx is None or idx < 0 or idx >= len(self._current_pd_choices):
+            return
+        c = self._current_pd_choices[idx]
+        c["pTag"] = self._edit_pd_ptag.text()
+        coms = []
+        for r in range(self._pd_table.rowCount()):
+            txt = (self._pd_table.item(r, 0).text() if self._pd_table.item(r, 0) else "")
+            try:
+                oAns = int(self._pd_table.item(r, 1).text() if self._pd_table.item(r, 1) else "-1")
+            except ValueError:
+                oAns = -1
+            try:
+                oAct = int(self._pd_table.item(r, 2).text() if self._pd_table.item(r, 2) else "-1")
+            except ValueError:
+                oAct = -1
+            coms.append({"text": txt, "oAns": oAns, "oAct": oAct, "iSet": idx, "extraD": ""})
+        c["coms"] = coms
+        self._serialize_dialog()
+
+    def _on_attach_pd_set(self) -> None:
+        """Create a new pd_ container and point the current node's oSet at it."""
+        row = self._node_list.currentRow()
+        if row < 0 or row >= len(self._current_nodes) or self._current_dlg_row < 0:
+            return
+        self._on_pd_set_add()          # appends container, updates combo
+        new_idx = len(self._current_pd_choices) - 1
+        self._current_nodes[row]["oSet"] = new_idx
+        oset_cmb = self._flow_combos["oSet"]
+        oset_cmb.addItem(f"{new_idx}  (pd_set)", new_idx)
+        oset_cmb.setCurrentIndex(oset_cmb.findData(new_idx))
+        self._serialize_dialog()
+        self._pd_box.show()
+        self._btn_attach_pd.hide()
+
+    def _on_pd_set_add(self) -> None:
+        if self._current_dlg_row < 0:
+            return
+        new_idx = len(self._current_pd_choices)
+        self._current_pd_choices.append({
+            "pd_id": new_idx, "pTag": "", "rect": [0, 0],
+            "expand": True, "vars": 0, "coms": [],
+        })
+        self._serialize_dialog()
+        self._cmb_pd_set.blockSignals(True)
+        self._cmb_pd_set.addItem(f"Set {new_idx}  (pd_id={new_idx})", new_idx)
+        self._cmb_pd_set.blockSignals(False)
+        self._cmb_pd_set.setCurrentIndex(new_idx)
+
+    def _on_pd_set_rem(self) -> None:
+        idx = self._cmb_pd_set.currentData()
+        if idx is None or idx < 0 or idx >= len(self._current_pd_choices):
+            return
+        # Remap nd_ oSet refs: refs == idx become -1; refs > idx are decremented
+        for node in self._current_nodes:
+            ref = node.get("oSet", -1)
+            if ref == idx:
+                node["oSet"] = -1
+            elif ref > idx:
+                node["oSet"] = ref - 1
+        self._current_pd_choices.pop(idx)
+        self._serialize_dialog()
+        self._rebuild_pd_ui()
+        self._rebuild_node_list(keep_row=self._node_list.currentRow())
+
+    def _on_pd_choice_add(self) -> None:
+        idx = self._cmb_pd_set.currentData()
+        if idx is None or idx < 0 or idx >= len(self._current_pd_choices):
+            return
+        r = self._pd_table.rowCount()
+        self._pd_table.insertRow(r)
+        self._pd_table.setItem(r, 0, QTableWidgetItem(""))
+        self._pd_table.setItem(r, 1, QTableWidgetItem("-1"))
+        self._pd_table.setItem(r, 2, QTableWidgetItem("-1"))
+        self._save_pd_form()
+
+    def _on_pd_choice_rem(self) -> None:
+        row = self._pd_table.currentRow()
+        if row < 0:
+            return
+        self._pd_table.removeRow(row)
+        self._save_pd_form()
 
     # ── Other slots ───────────────────────────────────────────────────────
 
@@ -848,7 +1377,13 @@ class EventWidget(QWidget):
         self._dlg_list.clear()
         self._node_list.clear()
         self._current_nodes = []
+        self._current_pd_choices = []
+        self._current_dlg_meta = {}
         self._current_dlg_row = -1
+        self._btn_graph_toggle.setEnabled(False)
+        self._btn_test.setEnabled(False)
+        self._meta_box.hide()
+        self._pd_box.hide()
         for e in dlgs:
             self._dlg_list.addItem(e.get("name", ""))
         # Clear stale node detail panel so previous pack's data doesn't linger

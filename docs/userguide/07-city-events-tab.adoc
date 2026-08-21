@@ -8,7 +8,7 @@ At the top of the tab, choose the *Event Type* — `normal` (default) or `explos
 === Backgrounds
 
 Click *Add…* to open a file picker and choose one or more background image files.
-Supported formats: `.png`, `.jpg`, `.jpeg`, `.dat`, `.jpa`, `.pna`, `.bytes`.
+Supported formats: `.png`, `.jpg`, `.jpeg`, `.dat`, `.jpa`, `.pna`, `.bytes`, `.byte` (MP4 video).
 
 The selected image is previewed on the right side of the panel.
 Use *▲* / *▼* to reorder backgrounds and *Remove* to delete the selected entry.
@@ -58,7 +58,7 @@ Shows and edits the properties of the selected node.
 | Field | Description
 
 | *Speaker*
-| Who speaks this line. Common values (`Aya`, `You`, `SKIP`, …) are available in the dropdown; you can also type any custom value. Leave blank for narration or system lines.
+| Who speaks this line. Common values (`Aya`, `You`, `SKIP`, `Schoolgirl`, `Teacher`, `Trio`, …) are available in the dropdown; you can also type any custom value. Leave blank for narration or system lines.
 
 | *Text*
 | The dialogue line shown in-game.
@@ -79,8 +79,26 @@ Shows and edits the properties of the selected node.
 | Zero or more commands executed when this node plays. Click the *Command* or *Argument* cell to open a dropdown. Use *Add* / *Remove* to manage rows.
 
 | *Browse…*
-| Enabled when the selected command uses an image argument (`showImage`, `showEventPhoto`, `mod_overlayImage3`, `mod_addEventSellablePhoto`). Opens a file picker; the asset stem name is inserted automatically, and a preview is shown below the table.
+| Enabled when the selected command uses an image or video argument (`showImage`, `mod_showImage`, `showEventPhoto`, `mod_overlayImage3`, `mod_addEventSellablePhoto`). Opens a file picker; the asset stem name is inserted automatically. If the selected file is an MP4 video (`.byte`), a video player widget replaces the image preview.
 |===
+
+==== Dialog Graph View
+
+Click *Show Graph* (or press the toolbar button) to open the visual node editor in a separate window.
+Each dialog node appears as a draggable coloured box; arrows show the three flow connections:
+
+* *Blue (N)* — Next Node (`oNPC`)
+* *Yellow (B)* — Branch To (`oSet`)
+* *Orange (A)* — Action Node (`oAct`)
+
+Dragging a node updates its stored position, which is preserved in the exported `.json` file.
+The graph view and the node list stay in sync because they share the same node list object — edits in either view are reflected immediately in the other.
+
+==== Dialog Player
+
+Click *Play…* to open the Dialog Player window.
+It steps through the scene node by node, rendering a composite preview of the current background, overlay, and dialog text box exactly as they appear in-game.
+Use the *Next (N)*, *Branch (B)*, and *Action (A)* buttons to follow different flow paths.
 
 === Export Validation
 

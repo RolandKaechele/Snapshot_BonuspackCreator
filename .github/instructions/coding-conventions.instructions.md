@@ -2,6 +2,13 @@
 applyTo: "**"
 ---
 
+## Edit Verification
+
+After any edit that removes or truncates content (deleting sections, replacing large blocks, cleaning up leftover text):
+- Re-read the affected portion of the file immediately after the edit.
+- Confirm the unwanted content is gone before declaring the task done.
+- If `replace_string_in_file` silently fails (no error but content remains), use a Python `open(..., 'w')` write via `run_in_terminal` to overwrite, then verify with `Select-String` or `Get-Content | Select-Object -Last N`.
+
 ## Coding Conventions
 
 - Python 3.12 features are fine (`match`/`case`, `tomllib`, etc.).

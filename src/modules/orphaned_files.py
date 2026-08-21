@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 _IMAGE_EXTS: frozenset[str] = frozenset(ASSET_EXTS) | frozenset([".json"])
 
 # Regex: bare filenames (no path) referenced inside dialog JSON strings
-_JSON_ASSET_RE = re.compile(r'"([^"]+\.(?:dat|jpa|pna|png|jpg|jpeg|bytes))"', re.IGNORECASE)
+_JSON_ASSET_RE = re.compile(r'"([^"]+\.(?:dat|jpa|pna|png|jpg|jpeg|bytes|byte))"', re.IGNORECASE)
 
 
 def _collect_referenced(data: dict) -> set[str]:
@@ -55,7 +55,12 @@ def _collect_referenced(data: dict) -> set[str]:
         src = event.get("source", "")
         if src:
             _add(src)
-        # parse image filenames out of dialog JSON content
+        # dialogs resolved by name (source is None until user browses)
+        if event.get("type") == "dialog":
+            name = event.get("name", "")
+            if name:
+                refs.add(name.lower())
+        # parse image/video filenames out of dialog JSON content
         content = event.get("content", "")
         if content:
             for m in _JSON_ASSET_RE.finditer(content):
