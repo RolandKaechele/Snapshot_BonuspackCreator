@@ -71,11 +71,28 @@ The worker handles two failure modes transparently:
 
 A 1.5-second delay is inserted between requests to avoid rate-limiting.
 
-=== Session Handling
+=== Session Handling and Cloudflare Turnstile
 
 `_get_session(opener)` returns `(ad_access_code, user_key)`.
 It visits the perchance embed page, extracts an ad access code, and calls `/api/verifyUser`.
 Sessions expire after a few minutes, which is why the worker refreshes on `invalid_key`.
+
+As of 2025, perchance.org uses Cloudflare Turnstile to block non-browser clients.
+`_do_get_session(opener)` wraps `_get_session` and catches `token_required` / `failed_verification` errors.
+When blocked it:
+
+1. Emits `session_required` on the worker (cross-thread signal).
+2. Blocks on a `threading.Event` for up to 180 seconds.
+3. Returns `(ad_access_code, user_key)` from the values provided by the main thread.
+
+The main thread connects `session_required` to `_on_session_required()`, which shows `_VerifySessionDialog`.
+
+==== _VerifySessionDialog
+
+Opens `https://image-generation.perchance.org/embed` in the system browser via `webbrowser.open()`.
+Shows step-by-step instructions for reading credentials from `localStorage` via DevTools Console.
+The user pastes the JSON result; `_on_verify()` parses `uk` and `ac` and calls `accept()`.
+Credentials flow back to the worker via `AiImageGenDialog._on_session_required` → `worker.set_session(user_key, ad_access_code)`.
 
 === Image Picker Dialog
 

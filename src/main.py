@@ -9,6 +9,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 from app_debug import set_debug
 from ui.main_window import MainWindow
 from PyQt6.QtWidgets import QApplication #type: ignore
+from PyQt6.QtCore import Qt
+
+# Required before QApplication is created so QtWebEngineWidgets can be imported later.
+QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
 
 
 def main() -> None:

@@ -116,6 +116,25 @@ Click *AI Generate…* to open the AI image generator, which calls the https://p
 NOTE: Large runs (e.g. *(any)* × all positions) can take several minutes.
 A 1.5-second pause is inserted between requests to avoid rate-limiting, and the session is refreshed automatically if it expires mid-run.
 
+==== Browser Verification (Cloudflare Turnstile)
+
+perchance.org uses Cloudflare Turnstile to block non-browser clients.
+The first time you generate images (or after a session expires), the app will:
+
+1. Open `https://image-generation.perchance.org/embed` in your default browser.
+2. Show a *Browser Verification* dialog with step-by-step instructions.
+
+In the browser:
+
+1. Press *F12* → click the *Console* tab.
+2. If Chrome warns about pasting, type `allow pasting` and press Enter first.
+3. Paste the command shown in the dialog and press Enter.
+4. Copy the result (starts with `{"uk":…`) back into the dialog's text box.
+5. Click *Verify*.
+
+The dialog stays open until you verify or cancel.
+Once verified, generation continues automatically.
+
 ==== Picking Images
 
 After generation finishes a *Select AI-Generated Images* picker opens showing thumbnails of all generated images.

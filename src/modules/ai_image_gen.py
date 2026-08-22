@@ -11,13 +11,15 @@ import json
 import os
 import random
 import tempfile
+import webbrowser
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Callable
 
-from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QSize, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -576,6 +578,11 @@ WIDGET_TYPES: dict[str, dict[str, dict]] = {
     "events": EVENT_TYPES,
 }
 
+# Widget types that generate character images (solo prefix is injected automatically).
+_CHAR_WIDGET_TYPES: frozenset[str] = frozenset(
+    {"photos", "photos_lewdshores", "love_lens", "love_lens_overlays"}
+)
+
 # ─── Perchance API helpers ────────────────────────────────────────────────────
 
 _PERCHANCE_PAGE_URL   = "https://perchance.org/ai-anime-generator"
@@ -589,6 +596,8 @@ _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
+
+_DEVTOOLS_JS = "JSON.stringify({uk: localStorage['userKey-0'] || '', ac: localStorage.adAccessCode || ''})"
 _BASE_HEADERS = {
     "User-Agent": _UA,
     "Accept": "application/json, text/plain, */*",
@@ -673,7 +682,11 @@ def _request_generate(prompt: str, ad_access_code: str, user_key: str,
     })
     body = json.dumps({
         "prompt": prompt,
-        "negativePrompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo",
+        "negativePrompt": (
+            "ugly, bad anatomy, blurry, low quality, watermark, text, logo, "
+            "2girls, 2boys, multiple girls, multiple boys, group, crowd, "
+            "extra people, background characters"
+        ),
         "seed": str(random.randint(0, 2**31)),
         "resolution": "512x512",
         "guidanceScale": "7",
@@ -735,9 +748,10 @@ class _GenerationWorker(QThread):
     """Calls the perchance API in a background thread."""
 
     progress = pyqtSignal(str)
-    image_ready = pyqtSignal(str, str, str)  # (path, pos_key, mod_key)
-    finished = pyqtSignal(list)              # list[tuple[str, str, str]]
+    image_ready = pyqtSignal(str, str, str)   # (path, pos_key, mod_key)
+    finished = pyqtSignal(list)               # list[tuple[str, str, str]]
     error = pyqtSignal(str)
+    session_required = pyqtSignal()           # ask main thread for browser auth
 
     def __init__(self, prompts: list[tuple[str, str, str]], n_per_prompt: int,
                  output_dir: str | None = None) -> None:
@@ -746,15 +760,46 @@ class _GenerationWorker(QThread):
         self._n = n_per_prompt
         self._output_dir = output_dir
         self._abort = False
+        self._session_event = threading.Event()
+        self._pending_user_key = ""
+        self._pending_ad_code = ""
 
     def abort(self) -> None:
         self._abort = True
+        self._session_event.set()  # unblock any waiting session request
+
+    def set_session(self, user_key: str, ad_access_code: str) -> None:
+        """Called from the main thread after browser-based verification succeeds."""
+        self._pending_user_key = user_key
+        self._pending_ad_code = ad_access_code
+        self._session_event.set()
+
+    def _do_get_session(self, opener: urllib.request.OpenerDirector) -> tuple[str, str]:
+        """Try tokenless auth; if blocked by Turnstile, request browser session."""
+        try:
+            return _get_session(opener)
+        except RuntimeError as exc:
+            if "token_required" not in str(exc) and "failed_verification" not in str(exc):
+                raise
+        _dlog("_GenerationWorker._do_get_session", "tokenless blocked; requesting browser session")
+        self.progress.emit("Browser verification required — please complete the check…")
+        self._session_event.clear()
+        self.session_required.emit()
+        if not self._session_event.wait(timeout=180):
+            raise RuntimeError("Session verification timed out after 180 s")
+        if self._abort:
+            raise RuntimeError("Aborted")
+        return self._pending_ad_code, self._pending_user_key
+
+    def abort(self) -> None:
+        self._abort = True
+        self._session_event.set()  # unblock any waiting session request
 
     def run(self) -> None:
         try:
             opener = _make_opener()
             self.progress.emit("Establishing session with perchance.org…")
-            ad_access_code, user_key = _get_session(opener)
+            ad_access_code, user_key = self._do_get_session(opener)
             pairs: list[tuple[str, str, str]] = []  # (path, pos_key, mod_key)
             total = len(self._prompts)
             for pi, (prompt, pos_key, mod_key) in enumerate(self._prompts):
@@ -778,7 +823,7 @@ class _GenerationWorker(QThread):
                                     f"Session expired – refreshing "
                                     f"(prompt {pi + 1}/{total})…"
                                 )
-                                ad_access_code, user_key = _get_session(opener)
+                                ad_access_code, user_key = self._do_get_session(opener)
                             else:
                                 raise
                     dl_url = result.get("imageDownloadUrl") or result.get("imageId", "")
@@ -801,6 +846,90 @@ class _GenerationWorker(QThread):
         except Exception as exc:
             _dlog("_GenerationWorker.run", f"error: {exc}")
             self.error.emit(str(exc))
+
+
+# ─── Browser verification dialog (Cloudflare Turnstile) ──────────────────────
+
+class _VerifySessionDialog(QDialog):
+    """Opens the perchance generator in the system browser, asks user to paste credentials.
+
+    Works regardless of GPU/WebEngine rendering capabilities on the local machine.
+    """
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("AI Image Generator – Browser Verification Required")
+        self.resize(560, 400)
+        self.user_key = ""
+        self.ad_access_code = ""
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        intro = QLabel(
+            "<b>perchance.org requires Cloudflare verification.</b><br><br>"
+            "Your browser will open automatically. Once the page loads:<br>"
+            "1. Press <b>F12</b> → click the <b>Console</b> tab<br>"
+            "2. If Chrome warns about pasting, type <b>allow pasting</b> and press Enter first<br>"
+            "3. Paste the command below and press Enter:"
+        )
+        intro.setWordWrap(True)
+        intro.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(intro)
+
+        js_box = QTextEdit()
+        js_box.setPlainText(_DEVTOOLS_JS)
+        js_box.setReadOnly(True)
+        js_box.setFixedHeight(52)
+        js_box.setObjectName("codeBox")
+        layout.addWidget(js_box)
+
+        paste_lbl = QLabel("4. Copy the result and paste it here:")
+        layout.addWidget(paste_lbl)
+
+        self._paste = QTextEdit()
+        self._paste.setPlaceholderText('{"uk":"...","ac":"..."}')
+        self._paste.setFixedHeight(60)
+        layout.addWidget(self._paste)
+
+        self._status = QLabel("")
+        self._status.setWordWrap(True)
+        layout.addWidget(self._status)
+
+        layout.addStretch()
+
+        btn_row = QHBoxLayout()
+        self._btn_ok = QPushButton("Verify")
+        self._btn_ok.setDefault(True)
+        self._btn_ok.clicked.connect(self._on_verify)
+        btn_cancel = QPushButton("Cancel")
+        btn_cancel.clicked.connect(self.reject)
+        btn_row.addWidget(self._btn_ok)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_cancel)
+        layout.addLayout(btn_row)
+
+    def exec(self) -> int:  # type: ignore[override]
+        webbrowser.open(_IMGGEN_EMBED_URL)
+        return super().exec()
+
+    def _on_verify(self) -> None:
+        raw = self._paste.toPlainText().strip()
+        try:
+            data = json.loads(raw)
+        except Exception:
+            self._status.setText("⚠ Invalid JSON — copy the full output from the Console.")
+            return
+        uk = data.get("uk", "") or data.get("userKey", "")
+        ac = data.get("ac", "") or data.get("adAccessCode", "")
+        if not uk:
+            self._status.setText("⚠ No userKey found. Make sure you ran the command on the perchance page.")
+            return
+        self.user_key = uk
+        self.ad_access_code = ac
+        _dlog("_VerifySessionDialog", f"got userKey={uk[:10]}… adCode={ac[:10]}…")
+        self.accept()
 
 
 # ─── Image Picker Dialog ──────────────────────────────────────────────────────
@@ -1099,6 +1228,13 @@ class AiImageGenDialog(QDialog):
         parts = [p for p in [base, enhancement] if p]
         return ", ".join(parts)
 
+    def _assemble_prompt(self, *parts: str) -> str:
+        """Join non-empty parts; prepend solo tag for character widget types."""
+        filtered = [p for p in parts if p]
+        if self._widget_type in _CHAR_WIDGET_TYPES:
+            filtered.insert(0, "solo, 1girl")
+        return ", ".join(filtered)
+
     def _on_gen_single(self) -> None:
         pos_key = self._cmb_type.currentData() or ""
         sel_mod = self._cmb_modifier.currentData() if self._cmb_modifier else ""
@@ -1110,16 +1246,15 @@ class AiImageGenDialog(QDialog):
             prompts: list[tuple[str, str, str]] = []
             for mod_key, mod_info in self._modifier_map.items():
                 mod_enh = mod_info.get("prompt_enhancement", "")
-                parts = [p for p in [base, enh, mod_enh] if p]
-                if parts:
-                    prompts.append((", ".join(parts), pos_key, mod_key))
+                prompt = self._assemble_prompt(base, enh, mod_enh)
+                if prompt:
+                    prompts.append((prompt, pos_key, mod_key))
             if not prompts:
                 return
             self._start_worker(prompts, n)
         else:
             mod_enh = self._modifier_map.get(sel_mod, {}).get("prompt_enhancement", "") if sel_mod else ""
-            parts = [p for p in [base, enh, mod_enh] if p]
-            prompt = ", ".join(parts)
+            prompt = self._assemble_prompt(base, enh, mod_enh)
             if not prompt:
                 self._lbl_progress.setText("Please enter a prompt.")
                 return
@@ -1134,16 +1269,20 @@ class AiImageGenDialog(QDialog):
             # (any) selected — generate for every position × modifier combination
             for pos_key, pos_info in self._type_map.items():
                 for mod_key, mod_info in self._modifier_map.items():
-                    parts = [p for p in [base, pos_info["prompt_enhancement"],
-                                         mod_info.get("prompt_enhancement", "")] if p]
-                    if parts:
-                        prompts.append((", ".join(parts), pos_key, mod_key))
+                    prompt = self._assemble_prompt(
+                        base, pos_info["prompt_enhancement"],
+                        mod_info.get("prompt_enhancement", ""),
+                    )
+                    if prompt:
+                        prompts.append((prompt, pos_key, mod_key))
         else:
             mod_enh = self._modifier_map.get(sel_mod, {}).get("prompt_enhancement", "") if sel_mod else ""
             for pos_key, pos_info in self._type_map.items():
-                parts = [p for p in [base, pos_info["prompt_enhancement"], mod_enh] if p]
-                if parts:
-                    prompts.append((", ".join(parts), pos_key, sel_mod))
+                prompt = self._assemble_prompt(
+                    base, pos_info["prompt_enhancement"], mod_enh
+                )
+                if prompt:
+                    prompts.append((prompt, pos_key, sel_mod))
         if not prompts:
             return
         self._start_worker(prompts, n)
@@ -1155,7 +1294,20 @@ class AiImageGenDialog(QDialog):
         self._worker.progress.connect(self._lbl_progress.setText)
         self._worker.finished.connect(self._on_worker_done)
         self._worker.error.connect(self._on_worker_error)
+        self._worker.session_required.connect(self._on_session_required)
         self._worker.start()
+
+    def _on_session_required(self) -> None:
+        """Show the browser verification dialog when Turnstile blocks the tokenless path."""
+        if not self._worker:
+            return
+        dlg = _VerifySessionDialog(self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            if self._worker:
+                self._worker.set_session(dlg.user_key, dlg.ad_access_code)
+        else:
+            if self._worker:
+                self._worker.abort()
 
     def _on_worker_done(self, pairs: list) -> None:
         _dlog("AiImageGenDialog._on_worker_done", f"{len(pairs)} images")

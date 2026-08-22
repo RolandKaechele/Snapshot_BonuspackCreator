@@ -139,3 +139,57 @@ def test_save_to_temp_uses_system_temp_when_no_output_dir(aig, tmp_path, monkeyp
     monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
     path = aig._save_to_temp(b"data", 1)
     assert "snapshot_pack_creator_ai" in path
+
+
+# ── _VerifySessionDialog ──────────────────────────────────────────────────────
+
+@pytest.fixture()
+def verify_dlg(qtbot, monkeypatch):
+    import webbrowser
+    monkeypatch.setattr(webbrowser, "open", lambda url: None)  # suppress real browser
+    from modules.ai_image_gen import _VerifySessionDialog
+    dlg = _VerifySessionDialog(None)
+    qtbot.addWidget(dlg)
+    return dlg
+
+
+def test_verify_dialog_constructs(verify_dlg):
+    assert verify_dlg.user_key == ""
+    assert verify_dlg.ad_access_code == ""
+
+
+def test_verify_dialog_rejects_invalid_json(verify_dlg, qtbot):
+    verify_dlg._paste.setPlainText("not-json")
+    verify_dlg._on_verify()
+    assert verify_dlg.user_key == ""
+    assert "Invalid JSON" in verify_dlg._status.text()
+
+
+def test_verify_dialog_rejects_missing_uk(verify_dlg):
+    import json
+    verify_dlg._paste.setPlainText(json.dumps({"uk": "", "ac": "abc"}))
+    verify_dlg._on_verify()
+    assert verify_dlg.user_key == ""
+    assert "No userKey" in verify_dlg._status.text()
+
+
+def test_verify_dialog_accepts_valid_credentials(verify_dlg, qtbot):
+    import json
+    payload = json.dumps({"uk": "abc123", "ac": "def456"})
+    verify_dlg._paste.setPlainText(payload)
+    with qtbot.waitSignal(verify_dlg.accepted, timeout=1000):
+        verify_dlg._on_verify()
+    assert verify_dlg.user_key == "abc123"
+    assert verify_dlg.ad_access_code == "def456"
+
+
+def test_verify_dialog_accepts_long_form_keys(verify_dlg, qtbot):
+    """Also accepts {"userKey":…,"adAccessCode":…} from manual DevTools copy."""
+    import json
+    payload = json.dumps({"userKey": "uk_val", "adAccessCode": "ac_val"})
+    verify_dlg._paste.setPlainText(payload)
+    with qtbot.waitSignal(verify_dlg.accepted, timeout=1000):
+        verify_dlg._on_verify()
+    assert verify_dlg.user_key == "uk_val"
+    assert verify_dlg.ad_access_code == "ac_val"
+
