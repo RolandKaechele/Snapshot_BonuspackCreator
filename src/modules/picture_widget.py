@@ -16,6 +16,7 @@ from app_debug import dlog as _dlog
 from modules.image_utils import ASSET_FILTER, load_pixmap
 from modules.tooltips import set_tip
 from ui.image_viewer import attach_viewer
+from modules.ai_image_gen import open_ai_generate_dialog
 
 if TYPE_CHECKING:
     from modules.pack_manager import PackManager
@@ -120,6 +121,9 @@ class PictureWidget(QWidget):
         self._btn_remove.setFixedWidth(70)
         self._btn_remove.clicked.connect(self._on_remove_selected)
         set_tip(self._btn_remove, "photo_remove")
+        self._btn_ai = QPushButton("AI Generate…")
+        self._btn_ai.setFixedWidth(100)
+        self._btn_ai.clicked.connect(self._on_ai_generate)
         self._lbl_count = QLabel("0 images")
         self._cmb_display_size = QComboBox()
         for label, _ in _DISPLAY_SIZES:
@@ -127,6 +131,7 @@ class PictureWidget(QWidget):
         self._cmb_display_size.currentIndexChanged.connect(self._on_display_size_changed)
         toolbar.addWidget(self._btn_add)
         toolbar.addWidget(self._btn_remove)
+        toolbar.addWidget(self._btn_ai)
         toolbar.addStretch()
         toolbar.addWidget(QLabel("Size:"))
         toolbar.addWidget(self._cmb_display_size)
@@ -230,6 +235,44 @@ class PictureWidget(QWidget):
         )
         if not paths:
             return
+        self._add_image_paths(paths)
+
+    def _on_ai_generate(self) -> None:
+        wtype = "photos_lewdshores" if self._pm.get("game") == "lewdshores" else "photos"
+        open_ai_generate_dialog(self, wtype, self._on_ai_accepted, output_dir=None)
+
+    def _on_ai_accepted(self, type_map: dict) -> None:
+        default_type = "none" if self._pm.get("game") == "lewdshores" else "plain"
+        # Move selected images from temp into the pack folder right away.
+        pack_path = self._pm.current_path
+        pack_dir = os.path.dirname(pack_path) if pack_path else None
+        if pack_dir:
+            relocated: dict[str, tuple[str, str]] = {}
+            for src, tags in type_map.items():
+                dest = os.path.join(pack_dir, os.path.basename(src))
+                if os.path.exists(src) and not os.path.exists(dest):
+                    import shutil
+                    shutil.move(src, dest)
+                relocated[dest if os.path.exists(dest) else src] = tags
+            type_map = relocated
+        by_type: dict[tuple[str, str], list[str]] = {}
+        for path, (pos_key, mod_key) in type_map.items():
+            by_type.setdefault((pos_key or "upskirt", mod_key or default_type), []).append(path)
+        first_new = len(self._pm.data.get("photos", []))
+        for (pos, mod), paths in by_type.items():
+            self._add_image_paths(paths, pos, mod)
+        # Auto-select the newly added items so Image Properties fills immediately
+        new_count = len(self._pm.data.get("photos", []))
+        if new_count > first_new:
+            self._list.clearSelection()
+            for i in range(first_new, new_count):
+                item = self._list.item(i)
+                if item:
+                    item.setSelected(True)
+            self._list.setCurrentRow(first_new)
+
+    def _add_image_paths(self, paths: list, position: str = "upskirt",
+                         photo_type: str = "plain") -> None:
         existing_sources = {p.get("source") for p in self._pm.data.get("photos", [])}
         for path in paths:
             if path in existing_sources:
@@ -240,15 +283,15 @@ class PictureWidget(QWidget):
             photos.append({
                 "name": name,
                 "source": path,
-                "position": "upskirt",
-                "type": "plain",
+                "position": position,
+                "type": photo_type,
                 "color": "white",
                 "overwrite_type": "",
                 "overwrite_color": "",
                 "thumbnail": False,
             })
         self._rebuild_list()
-        _dlog("PictureWidget._on_add_images", f"Added {len(paths)} images")
+        _dlog("PictureWidget._add_image_paths", f"Added {len(paths)} images")
 
     def _on_remove_selected(self) -> None:
         rows = sorted(

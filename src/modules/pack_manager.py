@@ -2,6 +2,8 @@
 
 import json
 import os
+import shutil
+import tempfile
 from typing import Any
 
 from app_debug import dlog as _dlog
@@ -121,11 +123,43 @@ class PackManager:
         _dlog("PackManager.load", f"Loaded {path}")
 
     def save(self, path: str) -> None:
+        pack_dir = os.path.dirname(os.path.abspath(path))
+        self._relocate_ai_images(pack_dir)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(self._data, f, indent=2, ensure_ascii=False)
         self._path = path
         self._dirty = False
         _dlog("PackManager.save", f"Saved {path}")
+
+    def _relocate_ai_images(self, pack_dir: str) -> None:
+        """Move any AI-generated images from the temp dir into the pack folder."""
+        temp_ai = os.path.normcase(
+            os.path.join(tempfile.gettempdir(), "snapshot_pack_creator_ai")
+        )
+
+        def _move(src: str) -> str:
+            if not src:
+                return src
+            norm = os.path.normcase(os.path.abspath(src))
+            if not norm.startswith(temp_ai):
+                return src
+            dest = os.path.join(pack_dir, os.path.basename(src))
+            if os.path.exists(src) and not os.path.exists(dest):
+                shutil.move(src, dest)
+                _dlog("PackManager._relocate_ai_images", f"{os.path.basename(src)} → pack dir")
+            return dest if os.path.exists(dest) else src
+
+        for entry in self._data.get("photos", []):
+            if entry.get("source"):
+                entry["source"] = _move(entry["source"])
+
+        for key in ("overlays", "textures", "love_lens_photos"):
+            for slot, paths in self._data.get(key, {}).items():
+                self._data[key][slot] = [_move(p) for p in paths]
+
+        for entry in self._data.get("events", []):
+            if entry.get("source"):
+                entry["source"] = _move(entry["source"])
 
     # ── Convenience accessors ───────────────────────────────────────────────
 

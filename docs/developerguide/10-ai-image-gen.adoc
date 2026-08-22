@@ -1,0 +1,98 @@
+== AI Image Generation (`src/modules/ai_image_gen.py`)
+
+The AI image generator integrates with the https://perchance.org[perchance.org] text-to-image API.
+It is accessible from the Photos, Love Lens, and City Events tabs via an *AI Generate…* button.
+
+=== Public Entry Point
+
+[source,python]
+----
+from modules.ai_image_gen import open_ai_generate_dialog
+
+open_ai_generate_dialog(
+    parent,           # QWidget
+    widget_type,      # "photos" | "photos_lewdshores" | "love_lens" |
+                      # "love_lens_overlays" | "events"
+    on_accepted,      # Callable[[dict[str, tuple[str, str]]], None]
+    output_dir=None,  # always pass None; generated images go to system temp
+)
+----
+
+`on_accepted` receives a dict mapping each *selected* image path to a `(pos_key, mod_key)` tuple.
+
+=== Type / Modifier Dictionaries
+
+[cols="1,2"]
+|===
+| Name | Purpose
+
+| `PHOTO_TYPES`
+| Position prompts for Snapshot! photos (upskirt, bench, event, …)
+
+| `LEWD_SHORES_PHOTO_TYPES`
+| Position prompts for Lewd Shores photos
+
+| `SNAPSHOT_PHOTO_MODIFIERS`
+| Content-type prompt additions for Snapshot! (plain, kinky, nude, …)
+
+| `LEWD_SHORES_PHOTO_MODIFIERS`
+| Content-type prompt additions for Lewd Shores (front view, butt view, …)
+
+| `LOVE_LENS_TYPES`
+| Position prompts for Love Lens result photos
+
+| `LOVE_LENS_OVERLAY_TYPES`
+| Position prompts for Love Lens overlay images
+
+| `EVENT_TYPES`
+| Scene prompts for City Events backgrounds/overlays
+|===
+
+`WIDGET_TYPES` maps `widget_type` strings to the correct position dict.
+`PHOTO_MODIFIER_TYPES` maps `"photos"` and `"photos_lewdshores"` to their modifier dicts.
+
+Adding a new entry to any dict is the only change needed to expose a new position or type to users.
+
+=== Worker Thread
+
+`_GenerationWorker(QThread)` accepts `list[tuple[str, str, str]]` — one `(prompt, pos_key, mod_key)` per request — and an `n_per_prompt` count.
+
+Signals:
+
+* `progress(str)` — status message for the progress label
+* `image_ready(path, pos_key, mod_key)` — emitted after each successful download
+* `finished(list[tuple[str, str, str]])` — emitted when all prompts are done
+* `error(str)` — emitted on fatal exception
+
+The worker handles two failure modes transparently:
+
+* `invalid_key` → refreshes the perchance session and retries once
+* `IncompleteRead` / `TimeoutError` / `ConnectionResetError` → retries up to 4 times with exponential back-off
+
+A 1.5-second delay is inserted between requests to avoid rate-limiting.
+
+=== Session Handling
+
+`_get_session(opener)` returns `(ad_access_code, user_key)`.
+It visits the perchance embed page, extracts an ad access code, and calls `/api/verifyUser`.
+Sessions expire after a few minutes, which is why the worker refreshes on `invalid_key`.
+
+=== Image Picker Dialog
+
+After the worker finishes, `ImagePickerDialog` presents all generated thumbnails.
+Images are pre-selected; the user deselects any they do not want.
+Only the selected paths are passed to `on_accepted`.
+
+=== *(any)* Modifier Behaviour
+
+When the *Photo Type* combobox is set to *(any)* (`mod_key == ""`):
+
+* *Generate n images (current type)* — iterates all modifiers for the selected position, generating n images per modifier.
+* *Generate n × types (all types)* — iterates every position × modifier combination, generating n images each.
+
+=== File Placement
+
+Images are always written to `%TEMP%/snapshot_pack_creator_ai/` during generation.
+Callers are responsible for moving selected images to the pack folder after the user confirms the picker.
+`PictureWidget._on_ai_accepted` does this immediately for photos.
+`PackManager._relocate_ai_images` moves any remaining temp-path references when the pack is saved.

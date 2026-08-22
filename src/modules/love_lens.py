@@ -15,6 +15,7 @@ from app_debug import dlog as _dlog
 from modules.image_utils import ASSET_FILTER, load_pixmap
 from modules.tooltips import set_tip
 from ui.image_viewer import attach_viewer
+from modules.ai_image_gen import open_ai_generate_dialog
 
 if TYPE_CHECKING:
     from modules.pack_manager import PackManager
@@ -123,7 +124,7 @@ class LoveLensWidget(QWidget):
         outer.addStretch()
         return page
 
-    def _build_slot_tab(self, slots: list, data_key: str) -> QWidget:
+    def _build_slot_tab(self, slots: list, data_key: str, ai_widget_type: str = "") -> QWidget:
         """Master-detail: slot list left | file toolbar + list + preview right."""
         page = QWidget()
         root = QVBoxLayout(page)
@@ -163,6 +164,11 @@ class LoveLensWidget(QWidget):
         file_toolbar.addSpacing(8)
         file_toolbar.addWidget(btn_up)
         file_toolbar.addWidget(btn_dn)
+        if ai_widget_type:
+            btn_ai = QPushButton("AI Generate…")
+            btn_ai.setFixedWidth(100)
+            file_toolbar.addSpacing(8)
+            file_toolbar.addWidget(btn_ai)
         file_toolbar.addStretch()
         right_layout.addLayout(file_toolbar)
 
@@ -302,17 +308,35 @@ class LoveLensWidget(QWidget):
         btn_up.clicked.connect(_on_up)
         btn_dn.clicked.connect(_on_dn)
 
+        if ai_widget_type:
+            def _on_ai_add(type_map: dict) -> None:
+                row = slot_list.currentRow()
+                if row < 0:
+                    return
+                if not _multi(row):
+                    files_list.clear()
+                for p in type_map:
+                    _add_file_item(p)
+                files_list.setCurrentRow(files_list.count() - 1)
+                _save(row)
+
+            btn_ai.clicked.connect(
+                lambda: open_ai_generate_dialog(
+                    page, ai_widget_type, _on_ai_add,
+                )
+            )
+
         self._slot_panels[data_key] = (slot_list, files_list, slots)
         return page
 
     def _build_overlays_tab(self) -> QWidget:
-        return self._build_slot_tab(OVERLAY_SLOTS, "overlays")
+        return self._build_slot_tab(OVERLAY_SLOTS, "overlays", ai_widget_type="love_lens_overlays")
 
     def _build_textures_tab(self) -> QWidget:
         return self._build_slot_tab(TEXTURE_SLOTS, "textures")
 
     def _build_photos_tab(self) -> QWidget:
-        return self._build_slot_tab(PHOTO_TYPES, "love_lens_photos")
+        return self._build_slot_tab(PHOTO_TYPES, "love_lens_photos", ai_widget_type="love_lens")
 
     # ── Persistence ───────────────────────────────────────────────────────
 

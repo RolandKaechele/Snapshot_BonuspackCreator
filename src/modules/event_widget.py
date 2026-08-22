@@ -21,6 +21,7 @@ from modules.dialog_player import DialogPlayerWindow
 from modules.image_utils import ASSET_FILTER, load_pixmap, resolve_asset
 from modules.tooltips import set_tip, tip
 from modules.video_widget import VideoPreviewWidget, is_video_file
+from modules.ai_image_gen import open_ai_generate_dialog
 from ui.image_viewer import attach_viewer
 
 if TYPE_CHECKING:
@@ -374,6 +375,11 @@ class EventWidget(QWidget):
         toolbar.addSpacing(8)
         toolbar.addWidget(btn_up)
         toolbar.addWidget(btn_dn)
+        if ev_type != "background":
+            btn_ai = QPushButton("AI Generate…")
+            btn_ai.setFixedWidth(100)
+            toolbar.addSpacing(8)
+            toolbar.addWidget(btn_ai)
         toolbar.addStretch()
         layout.addLayout(toolbar)
 
@@ -493,6 +499,28 @@ class EventWidget(QWidget):
         btn_rem.clicked.connect(_on_rem)
         btn_up.clicked.connect(lambda: _move(-1))
         btn_dn.clicked.connect(lambda: _move(1))
+
+        if ev_type != "background":
+            def _on_ai_add(type_map: dict) -> None:
+                events: list = self._pm.data.setdefault("events", [])
+                for path in type_map:
+                    if not any(e.get("type") == ev_type and e.get("source") == path for e in events):
+                        events.append({
+                            "type": ev_type,
+                            "source": path,
+                            "name": os.path.splitext(os.path.basename(path))[0],
+                        })
+                        item = QListWidgetItem(os.path.basename(path))
+                        item.setData(Qt.ItemDataRole.UserRole, path)
+                        ev_list.addItem(item)
+                if ev_list.count():
+                    ev_list.setCurrentRow(ev_list.count() - 1)
+
+            btn_ai.clicked.connect(
+                lambda: open_ai_generate_dialog(
+                    page, "events", _on_ai_add,
+                )
+            )
 
         if ev_type == "background":
             self._bg_list = ev_list

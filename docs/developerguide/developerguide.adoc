@@ -23,3 +23,5 @@ include::07-pack-json-schema.adoc[]
 include::08-testing.adoc[]
 
 include::09-build-and-release.adoc[]
+
+include::10-ai-image-gen.adoc[]

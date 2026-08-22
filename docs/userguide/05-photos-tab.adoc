@@ -77,3 +77,51 @@ The right panel shows a scaled preview of the selected image.
 When multiple images are selected no preview is shown.
 
 TIP: Double-click the preview to open a full-resolution viewer where you can zoom in/out (buttons or Ctrl+Scroll) and open the file in the system default editor.
+
+=== Generating Images with AI
+
+Click *AI Generate…* to open the AI image generator, which calls the https://perchance.org[perchance.org] text-to-image service (internet connection required).
+
+==== Dialog Controls
+
+[cols="1,3"]
+|===
+| Control | Purpose
+
+| Position
+| The game position the generated images will be tagged with (upskirt, bench, event, etc.)
+
+| Photo Type
+| The content-type modifier applied to the prompt (plain, kinky, nude, etc. for Snapshot!; front view, butt view, etc. for Lewd Shores).
+  Select *(any)* to generate images for every type automatically.
+
+| Base Prompt
+| Describe your character — e.g. `anime girl, black hair, school uniform`
+
+| Prompt Enhancement
+| Pre-filled from the selected position; extend freely to add extra details
+
+| Number of Images
+| Slider 1–16 — how many images to generate *per prompt*
+
+| Generate n images (current type)
+| Generate for the selected position only.
+  If Photo Type is *(any)*, generates n images for each modifier type.
+
+| Generate n × types (all types from table)
+| Generate for every position in the table.
+  If Photo Type is *(any)*, generates n images for every position × modifier combination.
+|===
+
+NOTE: Large runs (e.g. *(any)* × all positions) can take several minutes.
+A 1.5-second pause is inserted between requests to avoid rate-limiting, and the session is refreshed automatically if it expires mid-run.
+
+==== Picking Images
+
+After generation finishes a *Select AI-Generated Images* picker opens showing thumbnails of all generated images.
+Select the images you want to keep (all are pre-selected) and click *OK*.
+
+Only the selected images are added to the pack and moved into the pack folder.
+Rejected images remain in the system temp folder and are not copied.
+
+Each added image is automatically tagged with the Position and Photo Type used to generate it, which are shown immediately in the Image Properties panel.
