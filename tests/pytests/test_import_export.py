@@ -419,6 +419,28 @@ def test_read_passthrough_hypnosis_section(tmp_path):
     assert data.get("love_lens") == {"model": "slim", "hairStyle": "short"}
 
 
+def test_read_hypnosis_textures_haircolor_eyecolor_routed_to_love_lens(tmp_path):
+    # Some real-world packs store hairColor/eyeColor in [Hypnosis Textures]
+    # instead of [Hypnosis]; they must land in love_lens, not be "resolved"
+    # as bogus texture-file paths (e.g. "#fafafa").
+    ini = _make_ini(tmp_path, [
+        "[Mod]", "plugID=snapshot", "id=ll", "idrange=110000-110099", 'title="T"',
+        "[Hypnosis]",
+        "model=slim",
+        "[Hypnosis Textures]",
+        "body=ll_body1",
+        "hairColor=#fafafa",
+        "eyeColor=#00f531",
+        "[Photos]", "names=",
+    ])
+    data = _read_pack_ini(ini, str(tmp_path))
+    assert data.get("love_lens", {}).get("hairColor") == "#fafafa"
+    assert data.get("love_lens", {}).get("eyeColor") == "#00f531"
+    assert "hairColor" not in data.get("textures", {})
+    assert "eyeColor" not in data.get("textures", {})
+    assert "body" in data.get("textures", {})
+
+
 def test_write_passthrough_section_verbatim(tmp_path):
     # [Hypnosis] is now generated from structured love_lens data, not passthrough.
     ini = _make_ini(tmp_path, [

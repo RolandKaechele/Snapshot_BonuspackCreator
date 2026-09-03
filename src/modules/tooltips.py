@@ -40,6 +40,13 @@ TIPS: dict[str, str] = {
         "⚠  Check the Snapshot Discord to request your own unique ID range\n"
         "   so it won't clash with other community packs."
     ),
+    "pack_verify_photo_ids": (
+        "Checks this pack's photo IDs (ID Range + photo count) against the\n"
+        "local photo ID registry (src/registry.json) for collisions with\n"
+        "other scanned packs.\n\n"
+        "Build/update the registry with:\n"
+        "  tools\\scan_photo_registry.py --input <BonusContent folder>"
+    ),
 
     # ── Defaults section ─────────────────────────────────────────────────
     "defaults_position": (

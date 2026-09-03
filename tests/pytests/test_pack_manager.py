@@ -1,6 +1,7 @@
 """Tests for PackManager — load, save, new_pack, accessors, and dirty tracking."""
 
 import json
+import os
 import pytest
 from modules.pack_manager import PackManager, _EMPTY_PACK
 
@@ -86,6 +87,49 @@ def test_save_and_load_roundtrip(pm, tmp_path):
     assert pm2.get("id") == "testpack"
     assert pm2.get("game") == "lewdshores"
     assert pm2.current_path == path
+
+
+def test_save_stores_relative_path_for_image_inside_pack_folder(pm, tmp_path):
+    image_path = tmp_path / "photo1.png"
+    image_path.write_bytes(b"fake png")
+    pm.add_photo({"name": "photo1", "source": str(image_path)})
+    pack_path = str(tmp_path / "pack.json")
+    pm.save(pack_path)
+
+    with open(pack_path, encoding="utf-8") as f:
+        raw = json.load(f)
+    assert raw["photos"][0]["source"] == "photo1.png"
+    # In-memory data keeps the absolute path so the running app can still use it.
+    assert pm.data["photos"][0]["source"] == str(image_path)
+
+
+def test_save_keeps_absolute_path_for_image_outside_pack_folder(pm, tmp_path):
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    image_path = outside_dir / "photo1.png"
+    image_path.write_bytes(b"fake png")
+    pack_dir = tmp_path / "pack"
+    pack_dir.mkdir()
+    pm.add_photo({"name": "photo1", "source": str(image_path)})
+    pack_path = str(pack_dir / "pack.json")
+    pm.save(pack_path)
+
+    with open(pack_path, encoding="utf-8") as f:
+        raw = json.load(f)
+    assert raw["photos"][0]["source"] == str(image_path)
+
+
+def test_load_resolves_relative_image_path_to_absolute(pm, tmp_path):
+    (tmp_path / "photo1.png").write_bytes(b"fake png")
+    pack_path = tmp_path / "pack.json"
+    pack_path.write_text(
+        json.dumps({"photos": [{"name": "photo1", "source": "photo1.png"}]}),
+        encoding="utf-8",
+    )
+    pm.load(str(pack_path))
+    resolved = pm.data["photos"][0]["source"]
+    assert os.path.isabs(resolved)
+    assert os.path.normcase(resolved) == os.path.normcase(str(tmp_path / "photo1.png"))
 
 
 def test_save_writes_valid_json(pm, tmp_path):

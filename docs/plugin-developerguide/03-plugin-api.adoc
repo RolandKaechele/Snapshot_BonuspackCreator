@@ -51,3 +51,40 @@ def register(app):
 ----
 
 Never use `print()` for debug output.
+
+=== Diffusion Backend Plugins (AI Image Generator)
+
+Plugins can register an image-generation backend with the AI Image Generator
+(`modules.ai_image_gen`) by calling `register_diffusion_backend()` from their
+`register(app)` function:
+
+[source,python]
+----
+from modules import ai_image_gen as aig
+
+def register(app):
+    aig.register_diffusion_backend(
+        "my_backend",              # unique key
+        "My Backend (label)",      # shown in the Backend selector
+        worker_factory=make_worker,
+        is_available=lambda: True,       # hide until e.g. model files exist
+        supports_ip_adapter=False,       # show the character-reference group?
+        get_device_info=lambda: "",      # optional string for the window title
+        verify_dialog_cls=None,          # optional QDialog for interactive auth
+        ref_gen_dialog_cls=None,         # optional QDialog for the "Generate
+                                          # reference…" helper (Perchance-style)
+    )
+----
+
+`worker_factory(prompts, n, output_dir, **kwargs)` must return a `QThread`
+with `progress(str)`, `image_ready(str, str, str)`, `finished(list)`, and
+`error(str)` signals plus an `abort()` method. Local backends may accept the
+extra keyword arguments `ref_image_path`, `ip_adapter_scale`,
+`base_image_path`, `img2img_strength`, and `base_image_map`; unused kwargs
+should be accepted and ignored (`**_ignored`).
+
+When no backend plugin registers itself as available, the *AI Generate…*
+buttons in Photos, Love Lens, and City Events are hidden automatically.
+See `plugins/perchance_diffusion` (online, no dependencies) and
+`plugins/anythingxl_diffusion` (local Stable Diffusion XL, requires model
+files + `diffusers`) for full reference implementations.

@@ -41,6 +41,33 @@ def show_confirm(parent: QWidget, title: str, message: str, tag: str = "") -> bo
     return result == QMessageBox.StandardButton.Yes
 
 
+def show_file_removal_choice(parent: QWidget, title: str, message: str, tag: str = "") -> str:
+    """Ask what to do with a file's image when it is removed from the pack.
+
+    Returns one of "delete", "move", "keep" (leave the file on disk, only
+    remove the pack reference) or "cancel" (abort removing this entry).
+    """
+    from PyQt6.QtWidgets import QMessageBox  # type: ignore
+    _dlog(tag or f"dialog.file_removal.{title}", message)
+    box = QMessageBox(parent)
+    box.setWindowTitle(title)
+    box.setText(message)
+    btn_delete = box.addButton("Delete File", QMessageBox.ButtonRole.DestructiveRole)
+    btn_move = box.addButton("Move to Folder…", QMessageBox.ButtonRole.ActionRole)
+    btn_keep = box.addButton("Keep File", QMessageBox.ButtonRole.ActionRole)
+    btn_cancel = box.addButton(QMessageBox.StandardButton.Cancel)
+    box.setDefaultButton(btn_cancel)
+    box.exec()
+    clicked = box.clickedButton()
+    if clicked is btn_delete:
+        return "delete"
+    if clicked is btn_move:
+        return "move"
+    if clicked is btn_keep:
+        return "keep"
+    return "cancel"
+
+
 def show_confirm_with_checkbox(
     parent: QWidget,
     title: str,

@@ -23,12 +23,12 @@ from modules.cutscene_widget import CutsceneWidget
 from modules.love_lens import LoveLensWidget
 from modules.orphaned_files import OrphanedFilesWidget
 from modules.plugin_system import PluginSystem
+from modules.ai_image_gen import get_torch_info
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Snapshot Pack Creator")
         self.resize(1200, 800)
 
         self._pack_manager = PackManager()
@@ -39,6 +39,15 @@ class MainWindow(QMainWindow):
         build_menubar(self)
         self._statusbar_ctrl = StatusbarController(self.statusBar())
         self._plugin_system.load_plugins()
+
+        for _w in (self._picture_widget, self._love_lens_widget, self._event_widget):
+            if hasattr(_w, "update_ai_availability"):
+                _w.update_ai_availability()
+
+        torch_info = get_torch_info()
+        _dlog("MainWindow.__init__", f"torch info: {torch_info or 'torch not installed'}")
+        title = f"Snapshot Pack Creator  [{torch_info}]" if torch_info else "Snapshot Pack Creator"
+        self.setWindowTitle(title)
 
         self._statusbar_ctrl.set_info("Ready. Open or create a pack to begin.")
         _dlog("MainWindow.__init__", "Window ready")
@@ -140,8 +149,26 @@ class MainWindow(QMainWindow):
     # ── Tools menu handlers ─────────────────────────────────────────
 
     def on_manage_plugins(self) -> None:
-        info = "\n".join(self._plugin_system.loaded_plugin_names()) or "No plugins loaded."
+        names = self._plugin_system.loaded_plugin_names()
+        if not names:
+            info = "No plugins loaded."
+        else:
+            lines = []
+            for name in names:
+                meta = self._plugin_system.plugin_info(name)
+                line = name
+                if meta.get("version"):
+                    line += f"  v{meta['version']}"
+                if meta.get("description"):
+                    line += f"\n    {meta['description']}"
+                lines.append(line)
+            info = "\n".join(lines)
         show_info(self, "Loaded Plugins", info, tag="MainWindow.on_manage_plugins")
+
+    def on_edit_prompts(self) -> None:
+        from modules.prompt_editor_dialog import PromptEditorDialog
+        game = self._pack_manager.get("game", "")
+        PromptEditorDialog(self, initial_game=game).exec()
 
     # ── Help menu handlers ──────────────────────────────────────────────────
 

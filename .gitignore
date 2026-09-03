@@ -31,3 +31,16 @@ __pycache__/
 *.swp
 Thumbs.db
 /tests/packs
+/.local_cache
+/src/registry.json
+
+# assets
+src/assets
+
+# analysis docs
+docs/*.md
+todo.txt
+pytest_out.txt
+
+# plugins 
+plugins/

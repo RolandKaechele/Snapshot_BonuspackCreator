@@ -22,6 +22,7 @@ class PluginSystem:
     def __init__(self, app: "QMainWindow") -> None:
         self._app = app
         self._loaded: list[str] = []
+        self._info: dict[str, dict] = {}
 
     def load_plugins(self) -> None:
         plugins_dir = os.path.normpath(_PLUGINS_DIR)
@@ -49,6 +50,11 @@ class PluginSystem:
                 if hasattr(mod, "register") and callable(mod.register):
                     mod.register(self._app)
                     self._loaded.append(module_name)
+                    self._info[module_name] = {
+                        "version": getattr(mod, "__version__", ""),
+                        "description": (getattr(mod, "__doc__", "") or "").strip().splitlines()[0]
+                        if getattr(mod, "__doc__", "") else "",
+                    }
                     _dlog("PluginSystem.load_plugins", f"Loaded plugin: {module_name}")
                 else:
                     _dlog("PluginSystem.load_plugins",
@@ -59,3 +65,7 @@ class PluginSystem:
 
     def loaded_plugin_names(self) -> list[str]:
         return list(self._loaded)
+
+    def plugin_info(self, name: str) -> dict:
+        """Return {'version': str, 'description': str} for a loaded plugin."""
+        return self._info.get(name, {"version": "", "description": ""})

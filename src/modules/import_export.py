@@ -129,6 +129,34 @@ class ImportExportManager:
             if auto_fix and has_endevent_warns:
                 _inject_end_events(pm.data, {w[1] for w in endevent_warns})
                 self._parent._event_widget.refresh()
+
+        # Advisory checks: rare-photo cap (Snapshot) and Love Lens slot completeness.
+        extra_warnings: list[str] = []
+        if pm.get("game", "snapshot") == "snapshot" and pm.get("pack_type", "photos") == "photos":
+            from modules.picture_widget import get_rare_photo_warning
+            rare_msg = get_rare_photo_warning(pm.data)
+            if rare_msg:
+                extra_warnings.append(rare_msg)
+        if pm.get("pack_type", "photos") == "lovelens":
+            from modules.love_lens import get_missing_love_lens_elements, get_duplicate_texture_files
+            missing = get_missing_love_lens_elements(pm.data)
+            if missing:
+                extra_warnings.append(
+                    "Missing Love Lens elements (at least one file required for each):\n"
+                    + "\n".join(f"  \u2022 {m}" for m in missing)
+                )
+            duplicates = get_duplicate_texture_files(pm.data)
+            if duplicates:
+                extra_warnings.append(
+                    "Duplicate Love Lens texture assignments:\n"
+                    + "\n".join(f"  \u2022 {d}" for d in duplicates)
+                )
+        if extra_warnings:
+            if not show_confirm(self._parent, "Export Warnings",
+                               "\n\n".join(extra_warnings) + "\n\nExport anyway?",
+                               tag="ImportExportManager.run_export"):
+                return
+
         pack_id = pm.get("id") or "mypack"
         game = pm.get("game", "snapshot")
         pack_type_val = pm.get("pack_type", "photos")
@@ -381,8 +409,16 @@ def _read_pack_ini(ini_path: str, folder: str) -> dict:
                 k, _, v = s.partition("=")
                 k = k.strip()
                 v = v.split(";")[0].strip()
-                textures_import[k] = [_resolve_asset(n.strip())
-                                      for n in v.split(",") if n.strip()]
+                kl = k.lower()
+                # Some real-world packs store hairColor/eyeColor here instead of
+                # [Hypnosis]; route them into love_lens, not the texture-file list,
+                # or they get "resolved" as bogus asset paths (e.g. "#fafafa").
+                if kl in ("haircolor", "eyecolor"):
+                    camel = {"haircolor": "hairColor", "eyecolor": "eyeColor"}[kl]
+                    data.setdefault("love_lens", {})[camel] = v
+                else:
+                    textures_import[k] = [_resolve_asset(n.strip())
+                                          for n in v.split(",") if n.strip()]
             if textures_import:
                 data["textures"] = textures_import
         else:

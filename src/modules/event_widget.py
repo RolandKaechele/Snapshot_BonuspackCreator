@@ -12,15 +12,18 @@ from PyQt6.QtWidgets import (  # type: ignore
     QAbstractItemView, QStyledItemDelegate, QStackedWidget,
     QSpinBox, QGroupBox, QCheckBox, QFrame,
 )
-from PyQt6.QtGui import QPalette  # type: ignore
+from PyQt6.QtGui import QPalette, QIcon, QPixmap, QPainter, QFont  # type: ignore
 from PyQt6.QtCore import Qt  # type: ignore
 
 from app_debug import dlog as _dlog
 from modules.dialog_graph import DialogGraphWidget, DialogGraphWindow
 from modules.dialog_player import DialogPlayerWindow
-from modules.image_utils import ASSET_FILTER, load_pixmap, resolve_asset
+from modules.image_utils import (
+    ASSET_FILTER, load_pixmap, resolve_asset, resolve_audio_asset,
+    list_game_assets, resolve_game_asset,
+)
 from modules.tooltips import set_tip, tip
-from modules.video_widget import VideoPreviewWidget, is_video_file
+from modules.video_widget import VideoPreviewWidget, AudioPreviewWidget, is_video_file
 from modules.ai_image_gen import open_ai_generate_dialog
 from ui.image_viewer import attach_viewer
 
@@ -39,7 +42,7 @@ _KNOWN_CMDS = [
     "showEventPhoto", "noPhoto",
     "noOverlayImage", "mod_overlayImage3",
     "endEvent",
-    "playSound", "stopLoopedSound", "pulseBackground",
+    "playSound", "playSoundDelayed", "stopLoopedSound", "pulseBackground",
     "alleyAmbience",
     "mascotMoan1", "mascotMoan2", "suckLoop",
     "mod_addEventSellablePhoto",
@@ -48,6 +51,27 @@ _KNOWN_CMDS = [
 
 # Commands whose Argument is an image/video asset name
 _IMAGE_CMDS = {"showImage", "mod_showImage", "showEventPhoto", "mod_overlayImage3", "mod_addEventSellablePhoto"}
+
+# Commands whose Argument is a sound asset name
+_SOUND_CMDS = {"playSound", "playSoundDelayed", "stopLoopedSound"}
+
+_ICON_CACHE: dict = {}
+
+
+def _emoji_icon(char: str) -> QIcon:
+    """Render a unicode glyph onto a small pixmap for use as a combo-box icon."""
+    icon = _ICON_CACHE.get(char)
+    if icon is not None:
+        return icon
+    px = QPixmap(16, 16)
+    px.fill(Qt.GlobalColor.transparent)
+    p = QPainter(px)
+    p.setFont(QFont("Segoe UI Emoji", 9))
+    p.drawText(px.rect(), Qt.AlignmentFlag.AlignCenter, char)
+    p.end()
+    icon = QIcon(px)
+    _ICON_CACHE[char] = icon
+    return icon
 
 
 def _paint_as_combo(delegate, painter, option, index):
@@ -116,7 +140,11 @@ class _ArgDelegate(QStyledItemDelegate):
         cmd = index.sibling(index.row(), 0).data() or ""
         c = QComboBox(parent)
         c.setEditable(True)
-        c.addItems(self._get_options(cmd))
+        for icon, text in self._get_options(cmd):
+            if icon is not None:
+                c.addItem(icon, text)
+            else:
+                c.addItem(text)
         return c
 
     def setEditorData(self, editor, index):
@@ -326,7 +354,15 @@ class EventWidget(QWidget):
         self._current_pd_choices: list = []
         self._current_dlg_meta: dict = {}
         self._current_dlg_row: int = -1
+        self._ai_buttons: list = []
         self._build_ui()
+
+    def update_ai_availability(self) -> None:
+        """Hide AI Generate buttons when no diffusion plugin is available."""
+        from modules.ai_image_gen import has_any_backend
+        visible = has_any_backend()
+        for btn in self._ai_buttons:
+            btn.setVisible(visible)
 
     # ── Layout ────────────────────────────────────────────────────────────
 
@@ -380,6 +416,7 @@ class EventWidget(QWidget):
             btn_ai.setFixedWidth(100)
             toolbar.addSpacing(8)
             toolbar.addWidget(btn_ai)
+            self._ai_buttons.append(btn_ai)
         toolbar.addStretch()
         layout.addLayout(toolbar)
 
@@ -802,6 +839,9 @@ class EventWidget(QWidget):
         self._cmd_video_preview = VideoPreviewWidget()
         self._cmd_preview_stack.addWidget(self._cmd_video_preview)  # index 1
 
+        self._cmd_audio_preview = AudioPreviewWidget()
+        self._cmd_preview_stack.addWidget(self._cmd_audio_preview)  # index 2
+
         form_layout.addRow(self._cmd_preview_stack)
 
         form_scroll.setWidget(form_inner)
@@ -866,7 +906,8 @@ class EventWidget(QWidget):
             start = max(self._node_list.currentRow(), 0)
             self._dlg_player_win.load(
                 self._current_nodes, dlg_name, start,
-                self._resolve_pack_folder(), self._current_pd_choices)
+                self._resolve_pack_folder(), self._current_pd_choices,
+                self._pm.data.get("game", "snapshot"))
             self._dlg_player_win.show()
             self._dlg_player_win.raise_()
             self._dlg_player_win.activateWindow()
@@ -961,14 +1002,31 @@ class EventWidget(QWidget):
     # ── Variable table helpers ────────────────────────────────────────────
 
     def _get_arg_options(self, cmd: str) -> list:
-        """Return candidate argument values for the given command."""
+        """Return candidate (icon, text) argument options for the given command.
+
+        Game-builtin assets from src/assets/<type>/<game>/ are appended after
+        the project's own assets, marked with an icon; free text is still allowed.
+        """
         events = self._pm.data.get("events", [])
+        game = self._pm.data.get("game", "snapshot")
+        opts: list = [(None, "")]
+        seen: set = {""}
+
+        def _add(icon, names) -> None:
+            for n in names:
+                if n and n not in seen:
+                    seen.add(n)
+                    opts.append((icon, n))
+
         if cmd in ("showImage", "mod_showImage"):
-            return [""] + [e.get("name", "") for e in events
-                           if e.get("type") == "background" and e.get("name")]
+            _add(None, [e.get("name", "") for e in events
+                        if e.get("type") == "background" and e.get("name")])
+            _add(_emoji_icon("\U0001F5BC"), list_game_assets("Texture2D", game))
+            return opts
         if cmd in ("showEventPhoto", "mod_addEventSellablePhoto"):
-            return [""] + [e.get("name", "") for e in events
-                           if e.get("type") == "dialog" and e.get("name")]
+            _add(None, [e.get("name", "") for e in events
+                        if e.get("type") == "dialog" and e.get("name")])
+            return opts
         if cmd == "mod_overlayImage3":
             names = []
             data_dir = os.path.join(self._resolve_pack_folder(), "Data")
@@ -981,15 +1039,19 @@ class EventWidget(QWidget):
             if not names:
                 names = [e.get("name", "") for e in events
                          if e.get("type") == "overlay" and e.get("name")]
-            return [""] + names
-        if cmd in ("playSound", "stopLoopedSound"):
-            seen = {"camera"}
+            _add(None, names)
+            _add(_emoji_icon("\U0001F5BC"), list_game_assets("Texture2D", game))
+            return opts
+        if cmd in _SOUND_CMDS:
+            used = {"camera"}
             for node in self._current_nodes:
                 for v in node.get("vars", []):
-                    if v.get("key") in ("playSound", "stopLoopedSound") and v.get("val"):
-                        seen.add(v["val"])
-            return [""] + sorted(seen)
-        return [""]
+                    if v.get("key") in _SOUND_CMDS and v.get("val"):
+                        used.add(v["val"])
+            _add(None, sorted(used))
+            _add(_emoji_icon("\U0001F50A"), list_game_assets("AudioClip", game))
+            return opts
+        return opts
 
     def _populate_flow_combos(self) -> None:
         """Rebuild Next/Branch/Action dropdowns from the live node list."""
@@ -1007,28 +1069,46 @@ class EventWidget(QWidget):
     def _on_var_row_selected(self, row: int, _col: int, _prev: int, _prev_col: int) -> None:
         if row < 0:
             self._btn_cmd_browse.setEnabled(False)
-            self._cmd_preview.clear()
-            self._cmd_video_preview.clear()
-            self._cmd_preview_stack.setCurrentIndex(0)
+            self._clear_cmd_preview()
             return
         cmd_item = self._var_table.item(row, 0)
         cmd = cmd_item.text() if cmd_item else ""
         is_img = cmd in _IMAGE_CMDS
         self._btn_cmd_browse.setEnabled(is_img)
-        if is_img:
+        if is_img or cmd in _SOUND_CMDS:
             arg_item = self._var_table.item(row, 1)
-            self._refresh_cmd_preview(arg_item.text() if arg_item else "")
+            self._refresh_cmd_preview(cmd, arg_item.text() if arg_item else "")
         else:
+            self._clear_cmd_preview()
+
+    def _clear_cmd_preview(self) -> None:
+        self._cmd_preview.clear()
+        self._cmd_video_preview.clear()
+        self._cmd_audio_preview.clear()
+        self._cmd_preview_stack.setCurrentIndex(0)
+
+    def _refresh_cmd_preview(self, cmd: str, name: str) -> None:
+        pack_folder = self._resolve_pack_folder()
+        game = self._pm.data.get("game", "snapshot")
+        if cmd in _SOUND_CMDS:
+            path = resolve_audio_asset(name, pack_folder) if name and pack_folder else ""
+            if not path and name:
+                path = resolve_game_asset(name, "AudioClip", game)
+            if not path and name and os.path.isfile(name):
+                path = name
+            self._cmd_preview_path = path
             self._cmd_preview.clear()
             self._cmd_video_preview.clear()
-            self._cmd_preview_stack.setCurrentIndex(0)
-
-    def _refresh_cmd_preview(self, name: str) -> None:
-        pack_folder = self._resolve_pack_folder()
+            self._cmd_audio_preview.set_path(path)
+            self._cmd_preview_stack.setCurrentIndex(2)
+            return
         path = resolve_asset(name, pack_folder) if name and pack_folder else ""
+        if not (path and os.path.isfile(path)) and name:
+            path = resolve_game_asset(name, "Texture2D", game)
         if not path and name and os.path.isfile(name):
             path = name
         self._cmd_preview_path = path
+        self._cmd_audio_preview.clear()
         if path and is_video_file(path):
             self._cmd_video_preview.set_path(path)
             self._cmd_preview_stack.setCurrentIndex(1)
@@ -1083,7 +1163,7 @@ class EventWidget(QWidget):
         self._var_table.setItem(row, 1, QTableWidgetItem(name))
         self._var_table.blockSignals(False)
         self._save_node_form()
-        self._refresh_cmd_preview(name)
+        self._refresh_cmd_preview("showImage", name)
 
     def _on_var_add(self) -> None:
         row = self._var_table.rowCount()
@@ -1432,7 +1512,7 @@ class EventWidget(QWidget):
         self._var_table.blockSignals(True)
         self._var_table.setRowCount(0)
         self._var_table.blockSignals(False)
-        self._cmd_preview.clear()
+        self._clear_cmd_preview()
 
     def refresh(self) -> None:
         et = self._pm.get("event_type", "normal")

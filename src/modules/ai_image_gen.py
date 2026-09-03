@@ -1,31 +1,27 @@
-"""AI Image Generator — Perchance.org txt2img integration.
+"""AI Image Generator — dialog host for diffusion backend plugins.
 
-Opens a prompt dialog from Pictures, Love Lens, and Events widgets;
-generates images via the perchance.org AI image service; then shows a
-selection picker so the user can choose which images to keep.
+Opens a prompt dialog from Pictures, Love Lens, and Events widgets; delegates
+actual image generation to whichever diffusion backend plugin(s) are
+registered (see plugins/perchance_diffusion, plugins/anythingxl_diffusion),
+then shows a selection picker so the user can choose which images to keep.
 """
 
-import http.client
-import http.cookiejar
-import json
 import os
 import random
+import sys
 import tempfile
-import webbrowser
-import threading
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
+import json
 from typing import Callable
 
-from PyQt6.QtCore import Qt, QSize, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTextEdit, QComboBox, QSlider, QListWidget, QListWidgetItem,
     QSplitter, QWidget, QGroupBox, QFormLayout,
-    QDialogButtonBox, QProgressBar, QStackedWidget,
+    QDialogButtonBox, QProgressBar, QStackedWidget, QSizePolicy,
+    QFileDialog, QScrollArea,
 )
 
 from app_debug import dlog as _dlog, is_debug as _is_debug
@@ -578,6 +574,66 @@ WIDGET_TYPES: dict[str, dict[str, dict]] = {
     "events": EVENT_TYPES,
 }
 
+# Single shared negative prompt sent with every perchance.org generation request.
+NEGATIVE_PROMPT: str = (
+    "ugly, bad anatomy, blurry, low quality, watermark, text, logo, "
+    "2girls, 2boys, multiple girls, multiple boys, group, crowd, "
+    "extra people, background characters"
+)
+
+# ─── Prompt data loaded from an external JSON file (editable by end users) ───
+
+# Categories above; kept in sync with the "prompts.json" schema. Dicts are
+# mutated in-place on reload so existing references (e.g. WIDGET_TYPES) stay valid.
+_PROMPT_CATEGORIES: dict[str, dict] = {
+    "PHOTO_TYPES": PHOTO_TYPES,
+    "LOVE_LENS_TYPES": LOVE_LENS_TYPES,
+    "EVENT_TYPES": EVENT_TYPES,
+    "LOVE_LENS_OVERLAY_TYPES": LOVE_LENS_OVERLAY_TYPES,
+    "LEWD_SHORES_PHOTO_TYPES": LEWD_SHORES_PHOTO_TYPES,
+    "SNAPSHOT_PHOTO_MODIFIERS": SNAPSHOT_PHOTO_MODIFIERS,
+    "LEWD_SHORES_PHOTO_MODIFIERS": LEWD_SHORES_PHOTO_MODIFIERS,
+}
+
+
+def default_prompt_file() -> str:
+    """Return the default prompts.json path: beside main.py, or beside the exe when frozen."""
+    if getattr(sys, "frozen", False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # src/
+    return os.path.join(base, "prompts.json")
+
+
+def reload_prompts(path: str | None = None) -> None:
+    """(Re)load prompt-enhancement data from a JSON file into the module-level dicts.
+
+    Silently keeps the built-in defaults when the file is missing or invalid,
+    so this is always safe to call.
+    """
+    path = path or default_prompt_file()
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:
+        _dlog("ai_image_gen.reload_prompts", f"could not load {path!r}: {exc}")
+        return
+    for name, target in _PROMPT_CATEGORIES.items():
+        new_values = data.get(name)
+        if isinstance(new_values, dict):
+            target.clear()
+            target.update(new_values)
+    new_negative = data.get("NEGATIVE_PROMPT")
+    if isinstance(new_negative, str) and new_negative:
+        global NEGATIVE_PROMPT
+        NEGATIVE_PROMPT = new_negative
+    _dlog("ai_image_gen.reload_prompts", f"loaded prompts from {path!r}")
+
+
+# Load the default prompt file (if present) at import time so the built-in
+# dict literals above act as a fallback when no external file exists.
+reload_prompts()
+
 # Widget types that generate character images (solo prefix is injected automatically).
 _CHAR_WIDGET_TYPES: frozenset[str] = frozenset(
     {"photos", "photos_lewdshores", "love_lens", "love_lens_overlays"}
@@ -585,351 +641,66 @@ _CHAR_WIDGET_TYPES: frozenset[str] = frozenset(
 
 # ─── Perchance API helpers ────────────────────────────────────────────────────
 
-_PERCHANCE_PAGE_URL   = "https://perchance.org/ai-anime-generator"
-_PERCHANCE_ACCESS_URL = "https://perchance.org/api/getAccessCodeForAdPoweredStuff"
-_IMGGEN_EMBED_URL     = "https://image-generation.perchance.org/embed"
-_IMGGEN_VERIFY_URL    = "https://image-generation.perchance.org/api/verifyUser"
-_PERCHANCE_GEN_URL    = "https://image-generation.perchance.org/api/generate"
-_IMGGEN_DOWNLOAD_URL  = "https://image-generation.perchance.org"
+# ─── Diffusion backend plugin registry ───────────────────────────────────────
+#
+# Diffusion backends (Perchance.org online, AnythingXL local, …) are provided
+# by plugins in plugins/ that call register_diffusion_backend() from their
+# register(app) entry point. See plugins/perchance_diffusion and
+# plugins/anythingxl_diffusion for the reference implementations.
 
-_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-)
-
-_DEVTOOLS_JS = "JSON.stringify({uk: localStorage['userKey-0'] || '', ac: localStorage.adAccessCode || ''})"
-_BASE_HEADERS = {
-    "User-Agent": _UA,
-    "Accept": "application/json, text/plain, */*",
-}
-_IMGGEN_HEADERS = {
-    **_BASE_HEADERS,
-    "Origin": "https://image-generation.perchance.org",
-    "Referer": "https://image-generation.perchance.org/embed",
-}
-
-# Shared cookie-aware opener — established once per worker run so the
-# access-code fetch and generate request share the same browser session.
-def _make_opener() -> urllib.request.OpenerDirector:
-    jar = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-    opener.addheaders = [("User-Agent", _UA)]
-    return opener
+DIFFUSION_BACKENDS: dict[str, dict] = {}
 
 
-def _debug_dump(name: str, content: bytes, ext: str = "html") -> None:
-    if not _is_debug():
-        return
-    tmp_dir = os.path.join(tempfile.gettempdir(), "snapshot_pack_creator_ai")
-    os.makedirs(tmp_dir, exist_ok=True)
-    path = os.path.join(tmp_dir, f"debug_{name}_{int(time.time())}.{ext}")
-    with open(path, "wb") as fh:
-        fh.write(content)
-    _dlog("ai_image_gen._debug_dump", f"saved {path}")
+def register_diffusion_backend(
+    key: str,
+    label: str,
+    *,
+    worker_factory: Callable,
+    is_available: Callable[[], bool] = lambda: True,
+    supports_ip_adapter: bool = False,
+    get_device_info: Callable[[], str] = lambda: "",
+    verify_dialog_cls=None,
+    ref_gen_dialog_cls=None,
+) -> None:
+    """Register a diffusion backend plugin.
 
-
-def _get_session(opener: urllib.request.OpenerDirector) -> tuple[str, str]:
-    """Return (ad_access_code, user_key) by running the Perchance auth flow.
-
-    1. Visit the embed page to establish the image-generation.perchance.org context.
-    2. Call /api/verifyUser to obtain a userKey.
-    3. Fetch the time-keyed adAccessCode from perchance.org.
+    worker_factory(prompts, n, output_dir, **kwargs) must return a QThread with
+    progress/image_ready/finished/error pyqtSignals and an abort() method.
+    Local backends may additionally accept ref_image_path, ip_adapter_scale,
+    base_image_path, img2img_strength, base_image_map keyword arguments.
     """
-    # 1. Seed the embed context (not strictly needed for cookies, but mirrors the browser).
-    embed_req = urllib.request.Request(
-        _IMGGEN_EMBED_URL,
-        headers={**_IMGGEN_HEADERS, "Accept": "text/html,application/xhtml+xml,*/*"},
-    )
-    with opener.open(embed_req, timeout=15) as resp:
-        _debug_dump("embed_seed", resp.read(4096), "html")
-
-    # 2. Obtain userKey — /api/verifyUser returns {status, userKey} immediately.
-    verify_url = f"{_IMGGEN_VERIFY_URL}?thread=0&__cacheBust={random.random()}"
-    verify_req = urllib.request.Request(verify_url, headers=_IMGGEN_HEADERS)
-    with opener.open(verify_req, timeout=20) as resp:
-        verify_raw = resp.read()
-    verify_data = json.loads(verify_raw)
-    _debug_dump("verify_user", verify_raw, "json")
-    user_key = verify_data.get("userKey", "")
-    _dlog("ai_image_gen._get_session", f"verifyUser status={verify_data.get('status')!r} userKey={user_key[:10]}…")
-    if not user_key:
-        raise RuntimeError(f"perchance.org verifyUser failed: {verify_data.get('status')!r}")
-
-    # 3. Fetch the time-keyed adAccessCode (refreshes every 10 minutes).
-    cache_bust = round(time.time() / 600)
-    access_url = f"{_PERCHANCE_ACCESS_URL}?__cacheBust={cache_bust}"
-    access_req = urllib.request.Request(access_url, headers=_BASE_HEADERS)
-    with opener.open(access_req, timeout=15) as resp:
-        access_raw = resp.read()
-    ad_access_code = access_raw.decode().strip()
-    _debug_dump("access_code", access_raw, "txt")
-    _dlog("ai_image_gen._get_session", f"adAccessCode={ad_access_code[:10]}…")
-    if not ad_access_code:
-        raise RuntimeError("perchance.org returned empty adAccessCode")
-
-    return ad_access_code, user_key
+    DIFFUSION_BACKENDS[key] = {
+        "label": label,
+        "worker_factory": worker_factory,
+        "is_available": is_available,
+        "supports_ip_adapter": supports_ip_adapter,
+        "get_device_info": get_device_info,
+        "verify_dialog_cls": verify_dialog_cls,
+        "ref_gen_dialog_cls": ref_gen_dialog_cls,
+    }
+    _dlog("ai_image_gen.register_diffusion_backend", f"registered {key!r} ({label})")
 
 
-def _request_generate(prompt: str, ad_access_code: str, user_key: str,
-                      opener: urllib.request.OpenerDirector) -> dict:
-    """POST one generation request; return the parsed response dict."""
-    request_id = str(random.random())
-    params = urllib.parse.urlencode({
-        "userKey": user_key,
-        "requestId": request_id,
-        "adAccessCode": ad_access_code,
-        "__cacheBust": str(random.random()),
-    })
-    body = json.dumps({
-        "prompt": prompt,
-        "negativePrompt": (
-            "ugly, bad anatomy, blurry, low quality, watermark, text, logo, "
-            "2girls, 2boys, multiple girls, multiple boys, group, crowd, "
-            "extra people, background characters"
-        ),
-        "seed": str(random.randint(0, 2**31)),
-        "resolution": "512x512",
-        "guidanceScale": "7",
-        "channel": "ai-anime-generator",
-        "subChannel": "public",
-        "userKey": user_key,
-        "adAccessCode": ad_access_code,
-        "requestId": request_id,
-    }).encode()
-    headers = {**_IMGGEN_HEADERS, "Content-Type": "application/json"}
-    req = urllib.request.Request(f"{_PERCHANCE_GEN_URL}?{params}", data=body, headers=headers)
-    with opener.open(req, timeout=120) as resp:
-        raw = resp.read()
-    _debug_dump("generate_response", raw, "json")
-    parsed = json.loads(raw)
-    status = parsed.get("status", "")
-    _dlog("ai_image_gen._request_generate", f"status={status!r} keys={list(parsed.keys())}")
-    if status != "success":
-        raise RuntimeError(f"perchance.org generate error: {status}")
-    return parsed
+def available_backends() -> dict[str, dict]:
+    """Return the subset of registered backends whose is_available() is True."""
+    return {k: v for k, v in DIFFUSION_BACKENDS.items() if v["is_available"]()}
 
 
-def _download_bytes(url: str, opener: urllib.request.OpenerDirector,
-                    retries: int = 4) -> bytes:
-    # Relative URLs come from the image-generation subdomain.
-    if url.startswith("/"):
-        url = f"{_IMGGEN_DOWNLOAD_URL}{url}"
-    req = urllib.request.Request(url, headers=_IMGGEN_HEADERS)
-    last_exc: Exception = RuntimeError("download failed")
-    for attempt in range(retries):
-        try:
-            with opener.open(req, timeout=60) as resp:
-                return resp.read()
-        except (http.client.IncompleteRead, TimeoutError, ConnectionResetError) as exc:
-            last_exc = exc
-            _dlog("ai_image_gen._download_bytes",
-                  f"attempt {attempt + 1}/{retries} failed: {exc}")
-            time.sleep(2 ** attempt)  # 1 s, 2 s, 4 s back-off
-    raise last_exc
+def has_any_backend() -> bool:
+    """Return True when at least one diffusion backend plugin is available."""
+    return bool(available_backends())
 
 
-def _save_to_temp(image_bytes: bytes, idx: int, ext: str = "jpeg",
-                  output_dir: str | None = None) -> str:
-    if output_dir:
-        dest = output_dir
-    else:
-        dest = os.path.join(tempfile.gettempdir(), "snapshot_pack_creator_ai")
-    os.makedirs(dest, exist_ok=True)
-    filename = f"{int(time.time())}_{idx}.{ext}"
-    path = os.path.join(dest, filename)
-    with open(path, "wb") as fh:
-        fh.write(image_bytes)
-    return path
+def get_torch_info() -> str:
+    """Return the device info string from the first available backend, or ''.
 
-
-# ─── Background worker ────────────────────────────────────────────────────────
-
-class _GenerationWorker(QThread):
-    """Calls the perchance API in a background thread."""
-
-    progress = pyqtSignal(str)
-    image_ready = pyqtSignal(str, str, str)   # (path, pos_key, mod_key)
-    finished = pyqtSignal(list)               # list[tuple[str, str, str]]
-    error = pyqtSignal(str)
-    session_required = pyqtSignal()           # ask main thread for browser auth
-
-    def __init__(self, prompts: list[tuple[str, str, str]], n_per_prompt: int,
-                 output_dir: str | None = None) -> None:
-        super().__init__()
-        self._prompts = prompts  # [(prompt_text, pos_key, mod_key), ...]
-        self._n = n_per_prompt
-        self._output_dir = output_dir
-        self._abort = False
-        self._session_event = threading.Event()
-        self._pending_user_key = ""
-        self._pending_ad_code = ""
-
-    def abort(self) -> None:
-        self._abort = True
-        self._session_event.set()  # unblock any waiting session request
-
-    def set_session(self, user_key: str, ad_access_code: str) -> None:
-        """Called from the main thread after browser-based verification succeeds."""
-        self._pending_user_key = user_key
-        self._pending_ad_code = ad_access_code
-        self._session_event.set()
-
-    def _do_get_session(self, opener: urllib.request.OpenerDirector) -> tuple[str, str]:
-        """Try tokenless auth; if blocked by Turnstile, request browser session."""
-        try:
-            return _get_session(opener)
-        except RuntimeError as exc:
-            if "token_required" not in str(exc) and "failed_verification" not in str(exc):
-                raise
-        _dlog("_GenerationWorker._do_get_session", "tokenless blocked; requesting browser session")
-        self.progress.emit("Browser verification required — please complete the check…")
-        self._session_event.clear()
-        self.session_required.emit()
-        if not self._session_event.wait(timeout=180):
-            raise RuntimeError("Session verification timed out after 180 s")
-        if self._abort:
-            raise RuntimeError("Aborted")
-        return self._pending_ad_code, self._pending_user_key
-
-    def abort(self) -> None:
-        self._abort = True
-        self._session_event.set()  # unblock any waiting session request
-
-    def run(self) -> None:
-        try:
-            opener = _make_opener()
-            self.progress.emit("Establishing session with perchance.org…")
-            ad_access_code, user_key = self._do_get_session(opener)
-            pairs: list[tuple[str, str, str]] = []  # (path, pos_key, mod_key)
-            total = len(self._prompts)
-            for pi, (prompt, pos_key, mod_key) in enumerate(self._prompts):
-                for ji in range(self._n):
-                    if self._abort:
-                        break
-                    self.progress.emit(
-                        f"Generating image {ji + 1}/{self._n} "
-                        f"(prompt {pi + 1}/{total})…"
-                    )
-                    # Refresh session on invalid_key; retry once.
-                    for attempt in range(2):
-                        try:
-                            result = _request_generate(
-                                prompt, ad_access_code, user_key, opener
-                            )
-                            break
-                        except RuntimeError as exc:
-                            if "invalid_key" in str(exc) and attempt == 0:
-                                self.progress.emit(
-                                    f"Session expired – refreshing "
-                                    f"(prompt {pi + 1}/{total})…"
-                                )
-                                ad_access_code, user_key = self._do_get_session(opener)
-                            else:
-                                raise
-                    dl_url = result.get("imageDownloadUrl") or result.get("imageId", "")
-                    if not dl_url:
-                        _dlog("_GenerationWorker.run", f"no download URL in result: {result}")
-                        continue
-                    self.progress.emit(
-                        f"Downloading image {ji + 1}/{self._n} "
-                        f"(prompt {pi + 1}/{total})…"
-                    )
-                    data = _download_bytes(dl_url, opener)
-                    ext = result.get("fileExtension", "jpeg")
-                    path = _save_to_temp(data, len(pairs), ext, self._output_dir)
-                    pairs.append((path, pos_key, mod_key))
-                    self.image_ready.emit(path, pos_key, mod_key)
-                    time.sleep(1.5)  # avoid rate-limiting between requests
-                if self._abort:
-                    break
-            self.finished.emit(pairs)
-        except Exception as exc:
-            _dlog("_GenerationWorker.run", f"error: {exc}")
-            self.error.emit(str(exc))
-
-
-# ─── Browser verification dialog (Cloudflare Turnstile) ──────────────────────
-
-class _VerifySessionDialog(QDialog):
-    """Opens the perchance generator in the system browser, asks user to paste credentials.
-
-    Works regardless of GPU/WebEngine rendering capabilities on the local machine.
+    Called at startup so the info appears in the main window title.
     """
-
-    def __init__(self, parent: QWidget) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("AI Image Generator – Browser Verification Required")
-        self.resize(560, 400)
-        self.user_key = ""
-        self.ad_access_code = ""
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
-
-        intro = QLabel(
-            "<b>perchance.org requires Cloudflare verification.</b><br><br>"
-            "Your browser will open automatically. Once the page loads:<br>"
-            "1. Press <b>F12</b> → click the <b>Console</b> tab<br>"
-            "2. If Chrome warns about pasting, type <b>allow pasting</b> and press Enter first<br>"
-            "3. Paste the command below and press Enter:"
-        )
-        intro.setWordWrap(True)
-        intro.setTextFormat(Qt.TextFormat.RichText)
-        layout.addWidget(intro)
-
-        js_box = QTextEdit()
-        js_box.setPlainText(_DEVTOOLS_JS)
-        js_box.setReadOnly(True)
-        js_box.setFixedHeight(52)
-        js_box.setObjectName("codeBox")
-        layout.addWidget(js_box)
-
-        paste_lbl = QLabel("4. Copy the result and paste it here:")
-        layout.addWidget(paste_lbl)
-
-        self._paste = QTextEdit()
-        self._paste.setPlaceholderText('{"uk":"...","ac":"..."}')
-        self._paste.setFixedHeight(60)
-        layout.addWidget(self._paste)
-
-        self._status = QLabel("")
-        self._status.setWordWrap(True)
-        layout.addWidget(self._status)
-
-        layout.addStretch()
-
-        btn_row = QHBoxLayout()
-        self._btn_ok = QPushButton("Verify")
-        self._btn_ok.setDefault(True)
-        self._btn_ok.clicked.connect(self._on_verify)
-        btn_cancel = QPushButton("Cancel")
-        btn_cancel.clicked.connect(self.reject)
-        btn_row.addWidget(self._btn_ok)
-        btn_row.addStretch()
-        btn_row.addWidget(btn_cancel)
-        layout.addLayout(btn_row)
-
-    def exec(self) -> int:  # type: ignore[override]
-        webbrowser.open(_IMGGEN_EMBED_URL)
-        return super().exec()
-
-    def _on_verify(self) -> None:
-        raw = self._paste.toPlainText().strip()
-        try:
-            data = json.loads(raw)
-        except Exception:
-            self._status.setText("⚠ Invalid JSON — copy the full output from the Console.")
-            return
-        uk = data.get("uk", "") or data.get("userKey", "")
-        ac = data.get("ac", "") or data.get("adAccessCode", "")
-        if not uk:
-            self._status.setText("⚠ No userKey found. Make sure you ran the command on the perchance page.")
-            return
-        self.user_key = uk
-        self.ad_access_code = ac
-        _dlog("_VerifySessionDialog", f"got userKey={uk[:10]}… adCode={ac[:10]}…")
-        self.accept()
+    for entry in available_backends().values():
+        info = entry["get_device_info"]()
+        if info:
+            return info
+    return ""
 
 
 # ─── Image Picker Dialog ──────────────────────────────────────────────────────
@@ -956,6 +727,7 @@ class ImagePickerDialog(QDialog):
     # ── Build ─────────────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
+        self.resize(680, 600)
         root = QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(6)
@@ -1084,20 +856,22 @@ class AiImageGenDialog(QDialog):
         output_dir: str | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("AI Image Generator – perchance.org")
-        self.resize(680, 540)
         self._widget_type = widget_type
         self._type_map: dict[str, dict] = WIDGET_TYPES.get(widget_type, {})
         self._modifier_map: dict[str, dict] = PHOTO_MODIFIER_TYPES.get(widget_type, {})
         self._on_accepted = on_accepted
         self._output_dir = output_dir
-        self._worker: _GenerationWorker | None = None
+        self._worker = None
         self._picker: ImagePickerDialog | None = None
+        self._ref_image_path: str = ""
+        self._base_image_path: str = ""
         self._build_ui()
+        self._update_title()
 
     # ── Build ─────────────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
+        self.resize(680, 600)
         root = QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(6)
@@ -1110,10 +884,34 @@ class AiImageGenDialog(QDialog):
         self._stack.setCurrentIndex(0)
 
     def _build_form_page(self) -> QWidget:
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 0, 0, 0)
+        inner = QWidget()
+        layout = QVBoxLayout(inner)
+        layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
+
+        scroll = QScrollArea()
+        scroll.setWidget(inner)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        # ── Backend selector ──────────────────────────────────────────────
+        # Populated dynamically from diffusion backend plugins registered via
+        # register_diffusion_backend() (see plugins/*_diffusion).
+        self._backends = available_backends()
+        if len(self._backends) > 1:
+            backend_group = QGroupBox("Backend")
+            backend_form = QFormLayout(backend_group)
+            self._cmb_backend = QComboBox()
+            for key, entry in self._backends.items():
+                self._cmb_backend.addItem(entry["label"], key)
+            self._cmb_backend.setToolTip(
+                "Choose which installed diffusion plugin generates the images."
+            )
+            backend_form.addRow("Source:", self._cmb_backend)
+            layout.addWidget(backend_group)
+            self._cmb_backend.currentIndexChanged.connect(self._update_title)
+        else:
+            self._cmb_backend = None
 
         # ── Type selector ─────────────────────────────────────────────────
         type_group = QGroupBox("Image Type")
@@ -1122,12 +920,18 @@ class AiImageGenDialog(QDialog):
         for key, info in self._type_map.items():
             self._cmb_type.addItem(info["label"], key)
         self._cmb_type.currentIndexChanged.connect(self._on_type_changed)
+        self._cmb_type.setToolTip("Character position in the scene. Selects the prompt enhancement and the blueprint reference image.")
         type_form.addRow("Position:", self._cmb_type)
         if self._modifier_map:
             self._cmb_modifier = QComboBox()
             self._cmb_modifier.addItem("(any)", "")
             for key, info in self._modifier_map.items():
                 self._cmb_modifier.addItem(info["label"], key)
+            self._cmb_modifier.currentIndexChanged.connect(self._on_type_changed)
+            self._cmb_modifier.setToolTip(
+                "(any): generate images per photo type in a single run.\n"
+                "Specific type: generate only that type and enables the blueprint base image."
+            )
             type_form.addRow("Photo Type:", self._cmb_modifier)
         else:
             self._cmb_modifier = None
@@ -1142,6 +946,10 @@ class AiImageGenDialog(QDialog):
             '"anime girl, black hair, school uniform"'
         )
         self._edit_prompt.setFixedHeight(70)
+        self._edit_prompt.setToolTip(
+            "Free-text description of the character or scene.\n"
+            "This is appended to the type-specific prompt enhancement."
+        )
         prompt_layout.addWidget(self._edit_prompt)
         layout.addWidget(prompt_group)
 
@@ -1150,6 +958,10 @@ class AiImageGenDialog(QDialog):
         enh_layout = QVBoxLayout(enh_group)
         self._edit_enhancement = QTextEdit()
         self._edit_enhancement.setFixedHeight(90)
+        self._edit_enhancement.setToolTip(
+            "Auto-filled from the selected position/type. You can freely edit or extend it.\n"
+            "These keywords steer composition, lighting and mood before your base prompt."
+        )
         enh_layout.addWidget(self._edit_enhancement)
         layout.addWidget(enh_group)
 
@@ -1161,6 +973,10 @@ class AiImageGenDialog(QDialog):
         self._slider.setValue(4)
         self._slider.setTickInterval(1)
         self._slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self._slider.setToolTip(
+            "How many images to generate per prompt.\n"
+            "Higher values take proportionally longer but give more results to choose from."
+        )
         self._lbl_n = QLabel("4")
         self._lbl_n.setFixedWidth(24)
         self._slider.valueChanged.connect(
@@ -1170,14 +986,155 @@ class AiImageGenDialog(QDialog):
         count_layout.addWidget(self._lbl_n)
         layout.addWidget(count_group)
 
+        # ── Character reference image (IP-Adapter, local backend only) ────
+        self._ref_group = QGroupBox("Base Image + Character Reference  (IP-Adapter)")
+        ref_layout = QVBoxLayout(self._ref_group)
+
+        # Row 1 — Base image (blueprint → img2img structure)
+        self._base_row_widget = QWidget()
+        base_row = QHBoxLayout(self._base_row_widget)
+        base_row.setContentsMargins(0, 0, 0, 0)
+        self._lbl_base_thumb = QLabel()
+        self._lbl_base_thumb.setFixedSize(64, 64)
+        self._lbl_base_thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._lbl_base_thumb.setStyleSheet("background:#222; border:1px solid #555;")
+        base_row.addWidget(self._lbl_base_thumb)
+        base_info = QVBoxLayout()
+        base_hdr = QLabel("Base image (blueprint):")
+        base_hdr.setStyleSheet("font-weight:bold;")
+        base_info.addWidget(base_hdr)
+        self._lbl_base_path = QLabel("None")
+        self._lbl_base_path.setStyleSheet("color: gray;")
+        self._lbl_base_path.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        base_info.addWidget(self._lbl_base_path)
+        self._btn_base_randomize = QPushButton("Randomize")
+        self._btn_base_randomize.setFixedWidth(85)
+        self._btn_base_randomize.clicked.connect(self._on_base_randomize)
+        self._btn_base_randomize.setToolTip(
+            "Pick a different random blueprint for the current position + type.\n"
+            "The blueprint defines the composition and pose via img2img."
+        )
+        base_info.addWidget(self._btn_base_randomize)
+        base_row.addLayout(base_info)
+        ref_layout.addWidget(self._base_row_widget)
+
+        # Row 2 — Character image (IP-Adapter appearance)
+        char_row = QHBoxLayout()
+        self._lbl_ref_thumb = QLabel()
+        self._lbl_ref_thumb.setFixedSize(64, 64)
+        self._lbl_ref_thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._lbl_ref_thumb.setStyleSheet("background:#222; border:1px solid #555;")
+        char_row.addWidget(self._lbl_ref_thumb)
+        char_info = QVBoxLayout()
+        char_hdr = QLabel("Character image (IP-Adapter):")
+        char_hdr.setStyleSheet("font-weight:bold;")
+        char_info.addWidget(char_hdr)
+        self._lbl_ref_path = QLabel("No image selected")
+        self._lbl_ref_path.setStyleSheet("color: gray;")
+        self._lbl_ref_path.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        char_info.addWidget(self._lbl_ref_path)
+        char_btns = QHBoxLayout()
+        self._btn_ref_browse = QPushButton("Browse\u2026")
+        self._btn_ref_browse.setFixedWidth(75)
+        self._btn_ref_browse.clicked.connect(self._on_ref_browse)
+        self._btn_ref_browse.setToolTip("Load any image file as the character appearance reference for IP-Adapter.")
+        self._btn_ref_clear = QPushButton("Clear")
+        self._btn_ref_clear.setFixedWidth(55)
+        self._btn_ref_clear.clicked.connect(self._on_ref_clear)
+        self._btn_ref_clear.setToolTip("Remove the character reference image. IP-Adapter will be disabled.")
+        char_btns.addWidget(self._btn_ref_browse)
+        char_btns.addWidget(self._btn_ref_clear)
+        char_btns.addStretch()
+        char_info.addLayout(char_btns)
+        char_row.addLayout(char_info)
+        ref_layout.addLayout(char_row)
+
+        # IP-Adapter scale slider
+        scale_row = QHBoxLayout()
+        scale_row.addWidget(QLabel("IP-Adapter scale:"))
+        self._slider_ipa = QSlider(Qt.Orientation.Horizontal)
+        self._slider_ipa.setRange(10, 100)
+        self._slider_ipa.setValue(85)
+        self._slider_ipa.setTickInterval(10)
+        self._slider_ipa.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self._slider_ipa.setToolTip(
+            "Controls how strongly the character reference image influences the output (IP-Adapter).\n"
+            "0.3\u20130.5 \u2192 loose inspiration (colour palette, rough style).\n"
+            "0.6\u20130.8 \u2192 clear character likeness (face shape, hair, outfit).\n"
+            "0.9\u20131.0 \u2192 near-copy of the reference (less prompt freedom)."
+        )
+        self._lbl_ipa_scale = QLabel("0.85")
+        self._lbl_ipa_scale.setFixedWidth(36)
+        self._slider_ipa.valueChanged.connect(
+            lambda v: self._lbl_ipa_scale.setText(f"{v / 100:.2f}")
+        )
+        scale_row.addWidget(self._slider_ipa)
+        scale_row.addWidget(self._lbl_ipa_scale)
+        ref_layout.addLayout(scale_row)
+        # img2img strength (only relevant when a base image is set)
+        str_row = QHBoxLayout()
+        str_row.addWidget(QLabel("img2img strength:"))
+        self._slider_strength = QSlider(Qt.Orientation.Horizontal)
+        self._slider_strength.setRange(20, 95)
+        self._slider_strength.setValue(80)
+        self._slider_strength.setTickInterval(5)
+        self._slider_strength.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self._slider_strength.setToolTip(
+            "How much noise is added to the blueprint before denoising (img2img strength).\n"
+            "0.5\u20130.6 \u2192 output stays close to the blueprint silhouette.\n"
+            "0.7\u20130.8 \u2192 balanced: pose is kept, character detail can emerge.\n"
+            "0.85\u20130.95 \u2192 mostly re-drawn from prompt + IP-Adapter; blueprint only guides composition."
+        )
+        self._lbl_strength = QLabel("0.80")
+        self._lbl_strength.setFixedWidth(36)
+        self._slider_strength.valueChanged.connect(
+            lambda v: self._lbl_strength.setText(f"{v / 100:.2f}")
+        )
+        str_row.addWidget(self._slider_strength)
+        str_row.addWidget(self._lbl_strength)
+        ref_layout.addLayout(str_row)
+        gen_row = QHBoxLayout()
+        gen_row.addWidget(QLabel("Count:"))
+        self._slider_ref_n = QSlider(Qt.Orientation.Horizontal)
+        self._slider_ref_n.setRange(1, 8)
+        self._slider_ref_n.setValue(2)
+        self._slider_ref_n.setTickInterval(1)
+        self._slider_ref_n.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self._slider_ref_n.setToolTip("Number of reference images to generate via Perchance. Pick one from the results to use as the character IP-Adapter image.")
+        self._lbl_ref_n = QLabel("2")
+        self._lbl_ref_n.setFixedWidth(18)
+        self._slider_ref_n.valueChanged.connect(lambda v: self._lbl_ref_n.setText(str(v)))
+        self._btn_ref_gen = QPushButton("Generate with Perchance\u2026")
+        self._btn_ref_gen.clicked.connect(self._on_ref_gen_perchance)
+        self._btn_ref_gen.setToolTip(
+            "Generate character reference images via Perchance.org using the current prompt.\n"
+            "A preview dialog lets you pick the best result as the IP-Adapter character image."
+        )
+        gen_row.addWidget(self._slider_ref_n)
+        gen_row.addWidget(self._lbl_ref_n)
+        gen_row.addSpacing(8)
+        gen_row.addWidget(self._btn_ref_gen)
+        ref_layout.addLayout(gen_row)
+        self._btn_ref_gen.setVisible("perchance" in self._backends)
+        self._ref_group.setVisible(self._current_backend_supports_ip_adapter())
+        layout.addWidget(self._ref_group)
+
         # ── Buttons ───────────────────────────────────────────────────────
         btn_row = QHBoxLayout()
         self._btn_gen_single = QPushButton("Generate n images  (current type)")
         self._btn_gen_single.clicked.connect(self._on_gen_single)
+        self._btn_gen_single.setToolTip(
+            "Generate n images for the currently selected position and photo type.\n"
+            "Uses the blueprint as the structural base and the character image for appearance (if set)."
+        )
         self._btn_gen_all = QPushButton(
-            "Generate n × types  (all types from table)"
+            "Generate n \u00d7 types  (all types from table)"
         )
         self._btn_gen_all.clicked.connect(self._on_gen_all)
+        self._btn_gen_all.setToolTip(
+            "Generate n images for every position/type in the table.\n"
+            "Each entry gets its own randomly selected blueprint. The same character reference is used throughout."
+        )
         btn_cancel = QPushButton("Cancel")
         btn_cancel.clicked.connect(self.reject)
         btn_row.addWidget(self._btn_gen_single)
@@ -1188,7 +1145,22 @@ class AiImageGenDialog(QDialog):
 
         # Pre-fill enhancement for the first type
         self._on_type_changed(0)
-        return page
+        if self._cmb_backend:
+            self._cmb_backend.currentIndexChanged.connect(self._on_backend_changed)
+        return scroll
+
+    def _current_backend_key(self) -> str:
+        if self._cmb_backend:
+            return self._cmb_backend.currentData()
+        return next(iter(self._backends), "")
+
+    def _current_backend_supports_ip_adapter(self) -> bool:
+        entry = self._backends.get(self._current_backend_key())
+        return bool(entry and entry["supports_ip_adapter"])
+
+    def _on_backend_changed(self, _index: int = 0) -> None:
+        self._ref_group.setVisible(self._current_backend_supports_ip_adapter())
+        self._update_title()
 
     def _build_progress_page(self) -> QWidget:
         page = QWidget()
@@ -1212,12 +1184,175 @@ class AiImageGenDialog(QDialog):
 
     # ── Slots ──────────────────────────────────────────────────────────────
 
+    def _update_title(self, _index: int = 0) -> None:
+        key = self._current_backend_key()
+        entry = self._backends.get(key)
+        label = entry["label"] if entry else "?"
+        device_info = entry["get_device_info"]() if entry else ""
+        if device_info:
+            self.setWindowTitle(f"AI Image Generator – {label} [{device_info}]")
+        else:
+            self.setWindowTitle(f"AI Image Generator – {label}")
+
+    def _on_ref_gen_perchance(self) -> None:
+        pos_key = self._cmb_type.currentData() or ""
+        sel_mod = self._cmb_modifier.currentData() if self._cmb_modifier else ""
+        enh = self._edit_enhancement.toPlainText().strip()
+        base = self._edit_prompt.toPlainText().strip()
+        mod_enh = self._modifier_map.get(sel_mod, {}).get("prompt_enhancement", "") if sel_mod else ""
+        prompt = self._assemble_prompt(enh, mod_enh, base)
+        if not prompt:
+            from ui.dialogs import show_warning
+            show_warning(self, "Generate Reference", "Please enter a prompt first.",
+                         tag="AiImageGenDialog._on_ref_gen_perchance")
+            return
+        n = self._slider_ref_n.value()
+        _dlog("AiImageGenDialog._on_ref_gen_perchance", f"generating {n} reference image(s) via Perchance")
+        neg_override = self._type_map.get(pos_key, {}).get("negative_prompt", "")
+        perchance_entry = DIFFUSION_BACKENDS.get("perchance")
+        if not perchance_entry or not perchance_entry.get("ref_gen_dialog_cls"):
+            from ui.dialogs import show_warning
+            show_warning(self, "Generate Reference", "The Perchance plugin is not installed.",
+                         tag="AiImageGenDialog._on_ref_gen_perchance")
+            return
+        dlg = perchance_entry["ref_gen_dialog_cls"](self, [(prompt, pos_key, sel_mod, neg_override)], n)
+        if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_path:
+            self._set_ref_image(dlg.selected_path)
+            _dlog("AiImageGenDialog._on_ref_gen_perchance",
+                  f"reference set: {dlg.selected_path!r}")
+
+    def _on_base_randomize(self) -> None:
+        key = self._cmb_type.currentData() or ""
+        mod_key = self._cmb_modifier.currentData() if self._cmb_modifier else ""
+        bp = self._find_blueprint_for(key, mod_key or "")
+        if bp:
+            self._set_base_image(bp)
+            _dlog("AiImageGenDialog._on_base_randomize", f"new base: {bp!r}")
+
+    def _on_ref_browse(self) -> None:
+        from modules.image_utils import ASSET_FILTER  # noqa: F401 (already imported)
+        path, _ = QFileDialog.getOpenFileName(self, "Select Reference Image", "", ASSET_FILTER)
+        if path:
+            self._set_ref_image(path)
+            _dlog("AiImageGenDialog._on_ref_browse", f"reference image set: {path!r}")
+
+    def _on_ref_clear(self) -> None:
+        self._set_ref_image("")
+        _dlog("AiImageGenDialog._on_ref_clear", "reference image cleared")
+
+    # Maps widget_type to the game-specific blueprint subfolder name.
+    _GAME_BLUEPRINT_SUBDIR: dict[str, str] = {
+        "photos": "snapshot",
+        "photos_lewdshores": "lewdshores",
+    }
+
+    def _find_blueprint_for(self, pos_key: str, mod_key: str) -> str | None:
+        """Return a random blueprint PNG for (pos_key, mod_key); fall back to a raw pack asset."""
+        import glob as _glob
+        bp_root = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "assets", "blueprints",
+        )
+
+        def _search_dir(bp_dir: str) -> str | None:
+            if not os.path.isdir(bp_dir):
+                return None
+            for pattern in (
+                f"{pos_key}_{mod_key}_*.png" if mod_key else None,
+                f"{pos_key}_*.png",
+            ):
+                if pattern is None:
+                    continue
+                matches = _glob.glob(os.path.join(bp_dir, pattern))
+                if matches:
+                    return random.choice(matches)
+            return None
+
+        # Use only the game-specific subfolder; root is not searched directly.
+        game_subdir = self._GAME_BLUEPRINT_SUBDIR.get(self._widget_type)
+        if game_subdir:
+            result = _search_dir(os.path.join(bp_root, game_subdir))
+            if result:
+                return result
+        # Fallback: scan exported test-pack Data dirs for any image named pos_key* or *_pos_key*
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        asset_roots = [
+            os.path.join(project_root, "tests", "bonuscontent", "exported", "Snapshot!"),
+            os.path.join(project_root, "tests", "bonuscontent", "exported", "Snapshot! LewdShores"),
+        ]
+        _EXTS = (".png", ".pna", ".dat", ".jpa")
+        candidates: list[str] = []
+        for root in asset_roots:
+            if not os.path.isdir(root):
+                continue
+            for pack in os.listdir(root):
+                data_dir = os.path.join(root, pack, "Data")
+                if not os.path.isdir(data_dir):
+                    continue
+                for fname in os.listdir(data_dir):
+                    stem, ext = os.path.splitext(fname)
+                    if ext.lower() not in _EXTS:
+                        continue
+                    # Accept files whose name starts with pos_key (e.g. "standing_01")
+                    if stem.startswith(pos_key):
+                        candidates.append(os.path.join(data_dir, fname))
+        if candidates:
+            return random.choice(candidates)
+        return None
+
+    def _set_ref_image(self, path: str) -> None:
+        """Update the character reference image thumbnail."""
+        self._ref_image_path = path
+        if path:
+            px = QPixmap(path)
+            if not px.isNull():
+                self._lbl_ref_thumb.setPixmap(px.scaled(
+                    64, 64,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                ))
+            else:
+                self._lbl_ref_thumb.clear()
+            self._lbl_ref_path.setText(os.path.basename(path))
+            self._lbl_ref_path.setStyleSheet("")
+        else:
+            self._lbl_ref_thumb.clear()
+            self._lbl_ref_path.setText("No image selected")
+            self._lbl_ref_path.setStyleSheet("color: gray;")
+
+    def _set_base_image(self, path: str) -> None:
+        """Update the base blueprint image thumbnail."""
+        self._base_image_path = path
+        if path:
+            px = QPixmap(path)
+            if not px.isNull():
+                self._lbl_base_thumb.setPixmap(px.scaled(
+                    64, 64,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                ))
+            else:
+                self._lbl_base_thumb.clear()
+            self._lbl_base_path.setText(os.path.basename(path))
+            self._lbl_base_path.setStyleSheet("")
+        else:
+            self._lbl_base_thumb.clear()
+            self._lbl_base_path.setText("None")
+            self._lbl_base_path.setStyleSheet("color: gray;")
+
     def _on_type_changed(self, _index: int) -> None:
         key = self._cmb_type.currentData()
         if key and key in self._type_map:
             self._edit_enhancement.setPlainText(
                 self._type_map[key]["prompt_enhancement"]
             )
+        mod_key = self._cmb_modifier.currentData() if self._cmb_modifier else ""
+        self._base_row_widget.setVisible(mod_key != "")
+        bp = self._find_blueprint_for(key or "", mod_key or "")
+        if bp and mod_key != "":
+            self._set_base_image(bp)
+            _dlog("AiImageGenDialog._on_type_changed",
+                  f"auto-base: {bp!r}  pos={key!r} mod={mod_key!r}")
 
     def _build_full_prompt(self, type_key: str) -> str:
         base = self._edit_prompt.toPlainText().strip()
@@ -1225,7 +1360,7 @@ class AiImageGenDialog(QDialog):
             enhancement = self._type_map[type_key]["prompt_enhancement"]
         else:
             enhancement = self._edit_enhancement.toPlainText().strip()
-        parts = [p for p in [base, enhancement] if p]
+        parts = [p for p in [enhancement, base] if p]
         return ", ".join(parts)
 
     def _assemble_prompt(self, *parts: str) -> str:
@@ -1241,67 +1376,107 @@ class AiImageGenDialog(QDialog):
         enh = self._edit_enhancement.toPlainText().strip()
         base = self._edit_prompt.toPlainText().strip()
         n = self._slider.value()
+        neg_override = self._type_map.get(pos_key, {}).get("negative_prompt", "")
         if sel_mod == "" and self._modifier_map:
             # (any) selected — one prompt per modifier type for this position
-            prompts: list[tuple[str, str, str]] = []
+            prompts: list[tuple[str, str, str, str]] = []
             for mod_key, mod_info in self._modifier_map.items():
                 mod_enh = mod_info.get("prompt_enhancement", "")
-                prompt = self._assemble_prompt(base, enh, mod_enh)
+                prompt = self._assemble_prompt(enh, mod_enh, base)
                 if prompt:
-                    prompts.append((prompt, pos_key, mod_key))
+                    prompts.append((prompt, pos_key, mod_key, neg_override))
             if not prompts:
                 return
             self._start_worker(prompts, n)
         else:
             mod_enh = self._modifier_map.get(sel_mod, {}).get("prompt_enhancement", "") if sel_mod else ""
-            prompt = self._assemble_prompt(base, enh, mod_enh)
+            prompt = self._assemble_prompt(enh, mod_enh, base)
             if not prompt:
                 self._lbl_progress.setText("Please enter a prompt.")
                 return
-            self._start_worker([(prompt, pos_key, sel_mod)], n)
+            self._start_worker([(prompt, pos_key, sel_mod, neg_override)], n)
 
     def _on_gen_all(self) -> None:
         base = self._edit_prompt.toPlainText().strip()
         sel_mod = self._cmb_modifier.currentData() if self._cmb_modifier else ""
         n = self._slider.value()
-        prompts: list[tuple[str, str, str]] = []
+        prompts: list[tuple[str, str, str, str]] = []
+        base_image_map: dict[tuple, str] = {}
         if sel_mod == "" and self._modifier_map:
             # (any) selected — generate for every position × modifier combination
             for pos_key, pos_info in self._type_map.items():
+                neg_override = pos_info.get("negative_prompt", "")
                 for mod_key, mod_info in self._modifier_map.items():
                     prompt = self._assemble_prompt(
-                        base, pos_info["prompt_enhancement"],
+                        pos_info["prompt_enhancement"],
                         mod_info.get("prompt_enhancement", ""),
+                        base,
                     )
                     if prompt:
-                        prompts.append((prompt, pos_key, mod_key))
+                        prompts.append((prompt, pos_key, mod_key, neg_override))
+                        bp = self._find_blueprint_for(pos_key, mod_key)
+                        if bp:
+                            base_image_map[(pos_key, mod_key)] = bp
         else:
             mod_enh = self._modifier_map.get(sel_mod, {}).get("prompt_enhancement", "") if sel_mod else ""
             for pos_key, pos_info in self._type_map.items():
                 prompt = self._assemble_prompt(
-                    base, pos_info["prompt_enhancement"], mod_enh
+                    pos_info["prompt_enhancement"], mod_enh, base
                 )
                 if prompt:
-                    prompts.append((prompt, pos_key, sel_mod))
+                    prompts.append((prompt, pos_key, sel_mod, pos_info.get("negative_prompt", "")))
+                    bp = self._find_blueprint_for(pos_key, sel_mod or "")
+                    if bp:
+                        base_image_map[(pos_key, sel_mod)] = bp
         if not prompts:
             return
-        self._start_worker(prompts, n)
+        self._start_worker(prompts, n, base_image_map=base_image_map or None)
 
-    def _start_worker(self, prompts: list[tuple[str, str, str]], n: int) -> None:
+    def _start_worker(self, prompts: list[tuple[str, str, str, str]], n: int,
+                      base_image_map: dict | None = None) -> None:
         self._stack.setCurrentIndex(1)
-        self._lbl_progress.setText("Connecting to perchance.org…")
-        self._worker = _GenerationWorker(prompts, n, self._output_dir)
-        self._worker.progress.connect(self._lbl_progress.setText)
-        self._worker.finished.connect(self._on_worker_done)
-        self._worker.error.connect(self._on_worker_error)
-        self._worker.session_required.connect(self._on_session_required)
-        self._worker.start()
+        key = self._current_backend_key()
+        entry = self._backends.get(key)
+        self._active_backend = key
+        if not entry:
+            self._on_worker_error(f"No diffusion backend available (requested {key!r}).")
+            return
+        self._lbl_progress.setText(f"Starting {entry['label']} …")
+        ref = self._ref_image_path or None
+        scale = self._slider_ipa.value() / 100.0 if hasattr(self, "_slider_ipa") else 0.5
+        base = self._base_image_path or None
+        strength = self._slider_strength.value() / 100.0 if hasattr(self, "_slider_strength") else 0.6
+        worker = entry["worker_factory"](
+            prompts, n, self._output_dir,
+            ref_image_path=ref, ip_adapter_scale=scale,
+            base_image_path=base, img2img_strength=strength,
+            base_image_map=base_image_map,
+        )
+        worker.progress.connect(self._lbl_progress.setText)
+        worker.finished.connect(self._on_worker_done)
+        worker.error.connect(self._on_worker_error)
+        worker.image_ready.connect(
+            lambda path, pk, mk: self._on_image_ready(path, pk, mk)
+        )
+        if hasattr(worker, "session_required"):
+            worker.session_required.connect(self._on_session_required)
+        self._worker = worker
+        worker.start()
+
+    def _on_image_ready(self, path: str, pos_key: str, mod_key: str) -> None:
+        if self._picker:
+            self._picker.add_path(path)
 
     def _on_session_required(self) -> None:
         """Show the browser verification dialog when Turnstile blocks the tokenless path."""
         if not self._worker:
             return
-        dlg = _VerifySessionDialog(self)
+        entry = self._backends.get(self._active_backend)
+        verify_cls = entry["verify_dialog_cls"] if entry else None
+        if not verify_cls:
+            self._worker.abort()
+            return
+        dlg = verify_cls(self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             if self._worker:
                 self._worker.set_session(dlg.user_key, dlg.ad_access_code)
@@ -1313,12 +1488,9 @@ class AiImageGenDialog(QDialog):
         _dlog("AiImageGenDialog._on_worker_done", f"{len(pairs)} images")
         self._worker = None
         if not pairs:
-            show_error(
-                self, "AI Generate",
-                "No images were returned by perchance.org.\n"
-                "Check your internet connection or try again later.",
-                tag="AiImageGenDialog._on_worker_done",
-            )
+            label = self._backends.get(self._active_backend, {}).get("label", self._active_backend)
+            msg = f"{label} generated no images.\nCheck the debug log or your internet connection."
+            show_error(self, "AI Generate", msg, tag="AiImageGenDialog._on_worker_done")
             self._stack.setCurrentIndex(0)
             return
         self.hide()
@@ -1331,13 +1503,15 @@ class AiImageGenDialog(QDialog):
     def _on_worker_error(self, msg: str) -> None:
         _dlog("AiImageGenDialog._on_worker_error", msg)
         self._worker = None
-        show_error(
-            self, "AI Generate",
-            f"Image generation failed:\n{msg}\n\n"
-            "Make sure you are connected to the internet.\n"
-            "If the error persists, the perchance.org API may have changed.",
-            tag="AiImageGenDialog._on_worker_error",
+        label = self._backends.get(self._active_backend, {}).get("label", self._active_backend)
+        missing = any(k in msg for k in ("No module named", "ModuleNotFoundError"))
+        hint = (
+            "\n\nMake sure the required packages for this plugin are installed\n"
+            "(run cli.bat to update the venv)."
+            if missing else ""
         )
+        detail = f"{label} generation failed:\n{msg}{hint}"
+        show_error(self, "AI Generate", detail, tag="AiImageGenDialog._on_worker_error")
         self._stack.setCurrentIndex(0)
 
     def _on_abort(self) -> None:
@@ -1363,5 +1537,13 @@ def open_ai_generate_dialog(
     output_dir: str | None = None,
 ) -> None:
     """Show the AI image generation dialog for *widget_type*."""
+    if not has_any_backend():
+        show_error(
+            parent, "AI Generate",
+            "No diffusion backend plugin is installed.\n"
+            "Drop a plugin such as perchance_diffusion or anythingxl_diffusion into plugins/.",
+            tag="open_ai_generate_dialog",
+        )
+        return
     dlg = AiImageGenDialog(parent, widget_type, on_accepted, output_dir)
     dlg.exec()

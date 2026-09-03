@@ -5,3 +5,22 @@ Each plugin must expose a `register(app)` function.
 The application loads plugins automatically at startup.
 
 See `plugins\README.md` for a minimal example.
+
+=== Installing a Plugin
+
+. Unzip (or copy) the plugin folder into `plugins\` so that it sits next to
+  the existing plugin folders, e.g. `plugins\my_plugin\`.
+. If the plugin ships a `requirements.txt`, install its extra dependencies
+  into the application venv:
++
+[source,bat]
+----
+venv\Scripts\python.exe -m pip install -r plugins\my_plugin\requirements.txt
+----
+. If the plugin needs local model/data files, follow its own `README.md` for
+  where to place them (usually inside the plugin folder itself).
+. Restart the application. Use *Tools → Manage Plugins…* to confirm the
+  plugin loaded successfully; run with `--debug` for detailed load logs.
+. Some plugins (e.g. diffusion backends for the AI Image Generator) only
+  become active once their required files are present — the corresponding
+  UI elements appear or hide automatically.

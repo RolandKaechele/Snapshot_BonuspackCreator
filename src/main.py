@@ -1,5 +1,6 @@
 """Application entry point."""
 
+import argparse
 import sys
 import os
 
@@ -8,6 +9,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from app_debug import set_debug
 from ui.main_window import MainWindow
+from modules.ai_image_gen import reload_prompts
 from PyQt6.QtWidgets import QApplication #type: ignore
 from PyQt6.QtCore import Qt
 
@@ -16,8 +18,18 @@ QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
 
 
 def main() -> None:
-    if "--debug" in sys.argv or "-v" in sys.argv:
+    parser = argparse.ArgumentParser(
+        prog="Snapshot Pack Creator",
+        description="Windows desktop app for creating/editing Snapshot! and Lewd Shores bonus packs.",
+    )
+    parser.add_argument("--debug", "-v", action="store_true", help="Enable debug logging")
+    parser.add_argument("--prompt", default=None, help="Path to a custom prompts JSON file")
+    args, _ = parser.parse_known_args(sys.argv[1:])
+
+    if args.debug:
         set_debug(True)
+    if args.prompt:
+        reload_prompts(args.prompt)
 
     app = QApplication(sys.argv)
     app.setApplicationName("Snapshot Pack Creator")

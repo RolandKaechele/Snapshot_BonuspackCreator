@@ -2,14 +2,16 @@
 
 import os
 
-from PyQt6.QtCore import Qt, QRect  # type: ignore
+from PyQt6.QtCore import Qt, QRect, QUrl  # type: ignore
 from PyQt6.QtGui import QFont, QPixmap, QPainter, QColor  # type: ignore
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput  # type: ignore
 from PyQt6.QtWidgets import (  # type: ignore
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QGroupBox, QWidget, QSizePolicy,
 )
 
 from app_debug import dlog as _dlog
+from modules.image_utils import resolve_game_asset, resolve_audio_asset
 
 # Forward-flow port colours (same as graph)
 _COLOR_NEXT   = "#5599ff"
@@ -56,22 +58,24 @@ def _colored_btn(text: str, color: str, width: int) -> QPushButton:
     return btn
 
 
-def _resolve_image(stem: str, pack_dir: str) -> str:
-    """Return the first file matching *stem* (any image/video ext) inside pack_dir."""
-    if not stem or not pack_dir:
+def _resolve_image(stem: str, pack_dir: str, game: str = "snapshot") -> str:
+    """Return the first file matching *stem* (any image/video ext) inside pack_dir,
+    falling back to the game's builtin Texture2D assets."""
+    if not stem:
         return ""
-    for ext in (".png", ".jpg", ".jpeg", ".dat", ".jpa", ".pna", ".bytes", ".byte"):
-        p = os.path.join(pack_dir, stem + ext)
-        if os.path.isfile(p):
-            return p
-    # Scan all sub-dirs one level deep
-    for entry in os.scandir(pack_dir):
-        if entry.is_dir():
-            for ext in (".png", ".jpg", ".jpeg", ".dat", ".jpa", ".pna", ".bytes", ".byte"):
-                p = os.path.join(entry.path, stem + ext)
-                if os.path.isfile(p):
-                    return p
-    return ""
+    if pack_dir:
+        for ext in (".png", ".jpg", ".jpeg", ".dat", ".jpa", ".pna", ".bytes", ".byte"):
+            p = os.path.join(pack_dir, stem + ext)
+            if os.path.isfile(p):
+                return p
+        # Scan all sub-dirs one level deep
+        for entry in os.scandir(pack_dir):
+            if entry.is_dir():
+                for ext in (".png", ".jpg", ".jpeg", ".dat", ".jpa", ".pna", ".bytes", ".byte"):
+                    p = os.path.join(entry.path, stem + ext)
+                    if os.path.isfile(p):
+                        return p
+    return resolve_game_asset(stem, "Texture2D", game)
 
 
 class _CompositePanel(QWidget):
@@ -176,8 +180,12 @@ class DialogPlayerWindow(QDialog):
         self._current: int = 0
         self._history: list[int] = []
         self._pack_dir: str = ""
+        self._game: str = "snapshot"
         self._current_bg: str = ""
         self._current_ov: str = ""
+        self._sound_player = QMediaPlayer()
+        self._sound_audio = QAudioOutput()
+        self._sound_player.setAudioOutput(self._sound_audio)
         self._build_ui()
 
     # ── UI ────────────────────────────────────────────────────────────────
@@ -313,18 +321,32 @@ class DialogPlayerWindow(QDialog):
 
     def load(self, nodes: list, scene_name: str = "",
              start_index: int = 0, pack_dir: str = "",
-             pd_choices: list | None = None) -> None:
+             pd_choices: list | None = None, game: str = "snapshot") -> None:
         """Load *nodes* and player-dialog choices, begin playback at *start_index*."""
         self._nodes = nodes
         self._pd_choices = pd_choices or []
         self._history = []
         self._pack_dir = pack_dir
+        self._game = game
         self._current_bg = ""
         self._current_ov = ""
+        self._sound_player.stop()
         self._current = max(0, min(start_index, len(nodes) - 1)) if nodes else 0
         title = f"Dialog Test — {scene_name}" if scene_name else "Dialog Test"
         self.setWindowTitle(title)
         self._show_node()
+
+    def _play_sound(self, name: str) -> None:
+        """Resolve *name* against the pack's sound assets, then the game's, and play it."""
+        path = resolve_audio_asset(name, self._pack_dir) if name and self._pack_dir else ""
+        if not path and name:
+            path = resolve_game_asset(name, "AudioClip", self._game)
+        self._sound_player.stop()
+        if not path or not os.path.isfile(path):
+            _dlog("DialogPlayerWindow._play_sound", f"not found: {name!r}")
+            return
+        self._sound_player.setSource(QUrl.fromLocalFile(path))
+        self._sound_player.play()
 
     def jump_to(self, idx: int) -> None:
         """Jump to a specific node without clearing history."""
@@ -433,6 +455,10 @@ class DialogPlayerWindow(QDialog):
                 self._current_ov = val
             elif k == "noOverlayImage":
                 self._current_ov = ""
+            elif k in ("playSound", "playSoundDelayed"):
+                self._play_sound(val)
+            elif k == "stopLoopedSound":
+                self._sound_player.stop()
 
         if cmd_lines:
             self._lbl_cmds.setText("\n".join(cmd_lines))
@@ -442,9 +468,9 @@ class DialogPlayerWindow(QDialog):
 
         # Refresh composite with current (possibly persisted) image state
         self._composite.set_background(
-            _resolve_image(self._current_bg, self._pack_dir), self._current_bg)
+            _resolve_image(self._current_bg, self._pack_dir, self._game), self._current_bg)
         self._composite.set_overlay(
-            _resolve_image(self._current_ov, self._pack_dir), self._current_ov)
+            _resolve_image(self._current_ov, self._pack_dir, self._game), self._current_ov)
         self._composite.set_dialog(tag, text, _tag_bg(tag))
 
         # Flow buttons + player choice buttons

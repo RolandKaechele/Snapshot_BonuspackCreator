@@ -118,6 +118,57 @@ def test_dialog_lewdshores_modifier_combo_count(dialog_lewdshores, aig):
     assert dialog_lewdshores._cmb_modifier.count() == expected
 
 
+# ── prompts.json loading / negative_prompt overrides ──────────────────────────
+
+def test_negative_prompt_is_nonempty_string(aig):
+    assert isinstance(aig.NEGATIVE_PROMPT, str)
+    assert aig.NEGATIVE_PROMPT
+
+
+def test_default_prompt_file_points_at_src_prompts_json(aig):
+    path = aig.default_prompt_file()
+    assert path.endswith("prompts.json")
+
+
+@pytest.mark.parametrize("category", [
+    "PHOTO_TYPES", "LOVE_LENS_TYPES", "EVENT_TYPES", "LOVE_LENS_OVERLAY_TYPES",
+    "LEWD_SHORES_PHOTO_TYPES", "SNAPSHOT_PHOTO_MODIFIERS", "LEWD_SHORES_PHOTO_MODIFIERS",
+])
+def test_all_entries_have_negative_prompt_key(aig, category):
+    entries = getattr(aig, category)
+    for key, info in entries.items():
+        assert "negative_prompt" in info, f"{category}[{key!r}] missing 'negative_prompt'"
+
+
+def test_reload_prompts_overrides_in_place(aig, tmp_path):
+    original = dict(aig.PHOTO_TYPES["upskirt"])
+    custom_path = tmp_path / "custom_prompts.json"
+    custom_path.write_text(
+        '{"NEGATIVE_PROMPT": "custom neg", '
+        '"PHOTO_TYPES": {"upskirt": {"label": "Custom", '
+        '"prompt_enhancement": "custom prompt", "negative_prompt": "custom neg override"}}}',
+        encoding="utf-8",
+    )
+    try:
+        aig.reload_prompts(str(custom_path))
+        assert aig.PHOTO_TYPES["upskirt"]["label"] == "Custom"
+        assert aig.PHOTO_TYPES["upskirt"]["negative_prompt"] == "custom neg override"
+        assert aig.NEGATIVE_PROMPT == "custom neg"
+        # WIDGET_TYPES still references the same (mutated) dict object
+        assert aig.WIDGET_TYPES["photos"] is aig.PHOTO_TYPES
+    finally:
+        # Restore defaults so later tests in this module see the original data
+        aig.PHOTO_TYPES["upskirt"].clear()
+        aig.PHOTO_TYPES["upskirt"].update(original)
+        aig.reload_prompts()
+
+
+def test_reload_prompts_ignores_missing_file(aig):
+    before = dict(aig.PHOTO_TYPES["upskirt"])
+    aig.reload_prompts("/nonexistent/path/prompts.json")
+    assert aig.PHOTO_TYPES["upskirt"] == before
+
+
 def test_dialog_events_has_no_modifier_combo(qtbot, aig):
     from modules.ai_image_gen import AiImageGenDialog
     dlg = AiImageGenDialog(None, "events", lambda d: None)
@@ -125,71 +176,9 @@ def test_dialog_events_has_no_modifier_combo(qtbot, aig):
     assert dlg._cmb_modifier is None
 
 
-# ── _save_to_temp ─────────────────────────────────────────────────────────────
+# ── _save_to_temp / _VerifySessionDialog ──────────────────────────────────────
+# Moved to plugins/perchance_diffusion/tests/test_perchance_diffusion.py — this
+# behavior now lives in plugins/perchance_diffusion/__init__.py, and its tests
+# travel with the plugin rather than the core app test suite.
 
-def test_save_to_temp_writes_file(aig, tmp_path):
-    path = aig._save_to_temp(b"\xff\xd8\xff", 0, "jpeg", str(tmp_path))
-    assert path.startswith(str(tmp_path))
-    with open(path, "rb") as fh:
-        assert fh.read() == b"\xff\xd8\xff"
-
-
-def test_save_to_temp_uses_system_temp_when_no_output_dir(aig, tmp_path, monkeypatch):
-    import tempfile
-    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
-    path = aig._save_to_temp(b"data", 1)
-    assert "snapshot_pack_creator_ai" in path
-
-
-# ── _VerifySessionDialog ──────────────────────────────────────────────────────
-
-@pytest.fixture()
-def verify_dlg(qtbot, monkeypatch):
-    import webbrowser
-    monkeypatch.setattr(webbrowser, "open", lambda url: None)  # suppress real browser
-    from modules.ai_image_gen import _VerifySessionDialog
-    dlg = _VerifySessionDialog(None)
-    qtbot.addWidget(dlg)
-    return dlg
-
-
-def test_verify_dialog_constructs(verify_dlg):
-    assert verify_dlg.user_key == ""
-    assert verify_dlg.ad_access_code == ""
-
-
-def test_verify_dialog_rejects_invalid_json(verify_dlg, qtbot):
-    verify_dlg._paste.setPlainText("not-json")
-    verify_dlg._on_verify()
-    assert verify_dlg.user_key == ""
-    assert "Invalid JSON" in verify_dlg._status.text()
-
-
-def test_verify_dialog_rejects_missing_uk(verify_dlg):
-    import json
-    verify_dlg._paste.setPlainText(json.dumps({"uk": "", "ac": "abc"}))
-    verify_dlg._on_verify()
-    assert verify_dlg.user_key == ""
-    assert "No userKey" in verify_dlg._status.text()
-
-
-def test_verify_dialog_accepts_valid_credentials(verify_dlg, qtbot):
-    import json
-    payload = json.dumps({"uk": "abc123", "ac": "def456"})
-    verify_dlg._paste.setPlainText(payload)
-    with qtbot.waitSignal(verify_dlg.accepted, timeout=1000):
-        verify_dlg._on_verify()
-    assert verify_dlg.user_key == "abc123"
-    assert verify_dlg.ad_access_code == "def456"
-
-
-def test_verify_dialog_accepts_long_form_keys(verify_dlg, qtbot):
-    """Also accepts {"userKey":…,"adAccessCode":…} from manual DevTools copy."""
-    import json
-    payload = json.dumps({"userKey": "uk_val", "adAccessCode": "ac_val"})
-    verify_dlg._paste.setPlainText(payload)
-    with qtbot.waitSignal(verify_dlg.accepted, timeout=1000):
-        verify_dlg._on_verify()
-    assert verify_dlg.user_key == "uk_val"
-    assert verify_dlg.ad_access_code == "ac_val"
 

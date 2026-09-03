@@ -7,8 +7,9 @@ from PyQt6.QtWidgets import ( #type: ignore
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QGroupBox, QFormLayout, QPushButton, QSplitter,
     QListWidget, QListWidgetItem, QFileDialog, QLineEdit, QTabWidget,
+    QColorDialog,
 )
-from PyQt6.QtGui import QPixmap  # type: ignore
+from PyQt6.QtGui import QPixmap, QColor  # type: ignore
 from PyQt6.QtCore import Qt #type: ignore
 
 from app_debug import dlog as _dlog
@@ -62,6 +63,46 @@ PHOTO_TYPES = [
 ]
 
 
+def get_missing_love_lens_elements(pack_data: dict) -> list[str]:
+    """Return labels for overlay/texture slots and result-photo types with no file assigned.
+
+    Slots whose label contains "(optional)" (e.g. dropped ground clothes) are skipped.
+    """
+    missing: list[str] = []
+    overlays = pack_data.get("overlays", {})
+    for key, label in OVERLAY_SLOTS:
+        if not overlays.get(key):
+            missing.append(label)
+    textures = pack_data.get("textures", {})
+    for slot in TEXTURE_SLOTS:
+        key, label = slot[0], slot[1]
+        if "(optional)" in label:
+            continue
+        if not textures.get(key):
+            missing.append(label)
+    photos = pack_data.get("love_lens_photos", {})
+    for key, label in PHOTO_TYPES:
+        if not photos.get(key):
+            missing.append(label)
+    return missing
+
+
+def get_duplicate_texture_files(pack_data: dict) -> list[str]:
+    """Return messages for texture files assigned to more than one texture slot."""
+    textures = pack_data.get("textures", {})
+    label_by_key = {key: label for key, label, *_ in TEXTURE_SLOTS}
+    file_to_slots: dict[str, list[str]] = {}
+    for key, paths in textures.items():
+        label = label_by_key.get(key, key)
+        for path in paths:
+            file_to_slots.setdefault(path, []).append(label)
+    return [
+        f"{os.path.basename(path)} is assigned to multiple texture slots: {', '.join(slots)}"
+        for path, slots in file_to_slots.items()
+        if len(slots) > 1
+    ]
+
+
 class LoveLensWidget(QWidget):
     """Love Lens editor: character setup, overlays, textures, result photos."""
 
@@ -69,7 +110,15 @@ class LoveLensWidget(QWidget):
         super().__init__()
         self._pm = pack_manager
         self._slot_panels: dict = {}
+        self._ai_buttons: list = []
         self._build_ui()
+
+    def update_ai_availability(self) -> None:
+        """Hide AI Generate buttons when no diffusion plugin is available."""
+        from modules.ai_image_gen import has_any_backend
+        visible = has_any_backend()
+        for btn in self._ai_buttons:
+            btn.setVisible(visible)
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -107,11 +156,18 @@ class LoveLensWidget(QWidget):
         self._edit_eye_color.setPlaceholderText("#89b4fa")
         set_tip(self._edit_eye_color, "lovelens_eye_color")
 
+        hair_color_widget = self._build_color_row(
+            self._edit_hair_color, "#ad846d", "Pick Love Lens Hair Color"
+        )
+        eye_color_widget = self._build_color_row(
+            self._edit_eye_color, "#ad846d", "Pick Love Lens Eye Color"
+        )
+
         char_form.addRow("Model:", self._cmb_model)
         char_form.addRow("Hair Style:", self._cmb_hair)
         char_form.addRow("Accessories:", self._cmb_accessories)
-        char_form.addRow("Hair Color (hex):", self._edit_hair_color)
-        char_form.addRow("Eye Color (hex):", self._edit_eye_color)
+        char_form.addRow("Hair Color (hex):", hair_color_widget)
+        char_form.addRow("Eye Color (hex):", eye_color_widget)
 
         for w in (self._cmb_model, self._cmb_hair, self._cmb_accessories,
                   self._edit_hair_color, self._edit_eye_color):
@@ -123,6 +179,43 @@ class LoveLensWidget(QWidget):
         outer.addWidget(char_group)
         outer.addStretch()
         return page
+
+    def _build_color_row(self, edit: QLineEdit, default_hex: str, dialog_title: str) -> QWidget:
+        """Swatch label + hex field + '...' picker button, wired to a QColorDialog."""
+        swatch = QLabel()
+        swatch.setFixedSize(22, 22)
+        swatch.setStyleSheet("border: 1px solid #666;")
+
+        def _update_swatch(text: str) -> None:
+            color = QColor(text.strip())
+            if color.isValid():
+                swatch.setStyleSheet(f"background-color: {color.name()}; border: 1px solid #666;")
+            else:
+                swatch.setStyleSheet("border: 1px solid #666;")
+
+        def _pick_color() -> None:
+            current = edit.text().strip()
+            initial = QColor(current) if QColor(current).isValid() else QColor(default_hex)
+            color = QColorDialog.getColor(initial, self, dialog_title)
+            if color.isValid():
+                edit.setText(color.name())
+
+        edit.textChanged.connect(_update_swatch)
+        _update_swatch(edit.text())
+
+        btn_pick = QPushButton("Pick…")
+        btn_pick.setFixedWidth(52)
+        btn_pick.setToolTip("Open colour picker")
+        btn_pick.clicked.connect(_pick_color)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(swatch)
+        row.addWidget(edit, 1)
+        row.addWidget(btn_pick)
+        widget = QWidget()
+        widget.setLayout(row)
+        return widget
 
     def _build_slot_tab(self, slots: list, data_key: str, ai_widget_type: str = "") -> QWidget:
         """Master-detail: slot list left | file toolbar + list + preview right."""
@@ -169,6 +262,7 @@ class LoveLensWidget(QWidget):
             btn_ai.setFixedWidth(100)
             file_toolbar.addSpacing(8)
             file_toolbar.addWidget(btn_ai)
+            self._ai_buttons.append(btn_ai)
         file_toolbar.addStretch()
         right_layout.addLayout(file_toolbar)
 
@@ -349,17 +443,30 @@ class LoveLensWidget(QWidget):
         ll["eyeColor"] = self._edit_eye_color.text()
 
     def refresh(self) -> None:
-        ll: dict = self._pm.get("love_lens", {})
+        # Snapshot before touching widgets: _set_combo below can trigger
+        # currentIndexChanged -> _save_character, which re-serializes ALL
+        # combo values into this same dict and would otherwise clobber
+        # fields not yet applied (e.g. accessories/hairStyle) mid-refresh.
+        ll: dict = dict(self._pm.get("love_lens", {}))
 
         def _set_combo(cmb: QComboBox, val: str) -> None:
+            norm = val.lower().replace(" ", "")
             for i in range(cmb.count()):
-                if cmb.itemText(i).lower() == val.lower():
+                if cmb.itemText(i).lower().replace(" ", "") == norm:
                     cmb.setCurrentIndex(i)
                     return
 
-        _set_combo(self._cmb_model, ll.get("model", "normal"))
-        _set_combo(self._cmb_hair, ll.get("hairStyle", "default"))
-        _set_combo(self._cmb_accessories, ll.get("accessories", "none"))
+        for w in (self._cmb_model, self._cmb_hair, self._cmb_accessories):
+            w.blockSignals(True)
+        try:
+            _set_combo(self._cmb_model, ll.get("model", "normal"))
+            _set_combo(self._cmb_hair, ll.get("hairStyle", "default"))
+            _set_combo(self._cmb_accessories, ll.get("accessories", "none"))
+        finally:
+            for w in (self._cmb_model, self._cmb_hair, self._cmb_accessories):
+                w.blockSignals(False)
+        # Unblocked: triggers _update_swatch preview + a final _save_character
+        # with the now-fully-applied combo state (a harmless no-op re-save).
         self._edit_hair_color.setText(ll.get("hairColor", ""))
         self._edit_eye_color.setText(ll.get("eyeColor", ""))
 

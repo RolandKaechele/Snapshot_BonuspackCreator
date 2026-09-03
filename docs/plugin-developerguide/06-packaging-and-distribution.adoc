@@ -8,6 +8,10 @@ plugins\
 └── my_awesome_plugin\
     ├── __init__.py        ← must contain register(app)
     ├── widget.py          ← optional sub-modules
+    ├── tests\             ← optional; self-contained pytest suite (own conftest.py
+    │                        adding src\ and plugins\ to sys.path — do not rely on
+    │                        tests\pytests\conftest.py, which may not ship with
+    │                        a standalone plugin distribution)
     └── README.md          ← describe what the plugin does
 ----
 

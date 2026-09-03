@@ -1,11 +1,18 @@
 # SConstruct — Build script for Snapshot Pack Creator
 #
-# Targets (in order):
+# Targets (in order, repeated for each torch variant):
 #   1. Patch src/_version.py with the current build timestamp
 #   2. Convert umbrella AsciiDoc files to PDF  (requires asciidoctor-pdf)
-#   3. Freeze the application with PyInstaller  (one-directory bundle)
-#   4. Copy PDFs into the frozen bundle
-#   5. Pack everything into a console SFX installer  (7zCon.sfx, no UAC)
+#   3. Install the correct torch wheel into the venv
+#   4. Freeze the application with PyInstaller  (one-directory bundle per variant)
+#   5. Copy PDFs into the frozen bundle
+#   6. Pack everything into a console SFX installer  (7zCon.sfx, no UAC)
+#
+# Torch variants
+# --------------
+#   cpu   — CPU-only (any machine)
+#   cu121 — CUDA 12.1 (most NVIDIA GPUs)
+#   cu128 — CUDA 12.8 (RTX 5080 / Blackwell sm_120)
 #
 # Prerequisites
 # -------------
@@ -19,8 +26,11 @@
 #
 # Usage
 # -----
-#   scons            # build everything
-#   scons -c         # clean dist/ and build/ artefacts
+#   scons                # build all three torch variants
+#   scons torch=cpu      # build CPU-only variant only
+#   scons torch=cu121    # build CUDA 12.1 variant only
+#   scons torch=cu128    # build CUDA 12.8 variant only
+#   scons -c             # clean dist/ and build/ artefacts
 
 import datetime
 import glob
@@ -33,17 +43,30 @@ import sys
 _now          = datetime.datetime.now()
 BUILD_VERSION = _now.strftime("v%Y-%m-%d")
 
+# -- Torch variants ------------------------------------------------------------
+TORCH_VARIANTS = {
+    "cpu":   "https://download.pytorch.org/whl/cpu",
+    "cu121": "https://download.pytorch.org/whl/cu121",
+    "cu128": "https://download.pytorch.org/whl/cu128",
+}
+
+# scons torch=cpu|cu121|cu128  selects a single variant; default builds all.
+_torch_arg = ARGUMENTS.get("torch", "all")  # type: ignore[name-defined]
+if _torch_arg == "all":
+    _build_variants = list(TORCH_VARIANTS.keys())
+elif _torch_arg in TORCH_VARIANTS:
+    _build_variants = [_torch_arg]
+else:
+    print(f"ERROR: torch={_torch_arg!r} unknown. Valid choices: {', '.join(TORCH_VARIANTS)}")
+    Exit(1)  # type: ignore[name-defined]
+
 # -- Configuration -------------------------------------------------------------
 APP_NAME    = "SnapshotPackCreator"
 ENTRY_POINT = os.path.join("src", "main.py")
 
 BIN_DIR  = "dist"
-APP_DIR  = os.path.join(BIN_DIR, APP_NAME)          # dist/SnapshotPackCreator/
 WORK_DIR = os.path.join("build", "pyinstaller-work")
 SPEC_DIR = os.path.join("build")
-
-# PDFs land here inside the bundle
-DOCS_DEST = os.path.join(APP_DIR, "docs")
 
 # build/docs/ — intermediate location for generated PDFs
 _DOCS_BUILD_DIR = os.path.join("build", "docs")
@@ -55,10 +78,6 @@ ADOC_SOURCES = [
     (os.path.join("docs", "developerguide",      "developerguide.adoc"),       "developerguide"),
     (os.path.join("docs", "plugin-developerguide", "plugin-developerguide.adoc"), "plugin-developerguide"),
 ]
-
-# SFX installer output
-SFX_EXE     = os.path.join(BIN_DIR, f"{APP_NAME}_{BUILD_VERSION}_installer.exe")
-SFX_ARCHIVE = os.path.join(SPEC_DIR, "bundle.7z")
 
 # Optional app icon
 ICON_PATH = os.path.join("src", "ui", "app.ico")
@@ -154,21 +173,20 @@ def _rmtree_force(path):
 
 
 def _run_pyinstaller(target, source, env):
-    py = _python()
+    py      = _python()
+    variant = env["TORCH_VARIANT"]
+    app_dir = os.path.join(BIN_DIR, f"{APP_NAME}_{variant}")
 
-    # Pre-delete the output directory so PyInstaller never hits a locked path
-    out_dir = os.path.join(BIN_DIR, APP_NAME)
-    if os.path.exists(out_dir):
-        print(f"Removing existing dist dir: {out_dir}")
-        _rmtree_force(out_dir)
+    if os.path.exists(app_dir):
+        print(f"Removing existing dist dir: {app_dir}")
+        _rmtree_force(app_dir)
 
     cmd = [
         py, "-m", "PyInstaller",
-        "--name",     APP_NAME,
+        "--name",     f"{APP_NAME}_{variant}",
         "--windowed",
-        #"--onedir",
         "--distpath", BIN_DIR,
-        "--workpath", WORK_DIR,
+        "--workpath", os.path.join(WORK_DIR, variant),
         "--specpath", SPEC_DIR,
         "--noconfirm",
         "--paths",    "src",
@@ -177,28 +195,34 @@ def _run_pyinstaller(target, source, env):
     if os.path.isfile(ICON_PATH):
         cmd += ["--icon", ICON_PATH]
 
-    # Bundle QSS stylesheet as data file
     qss_path = os.path.join("src", "ui", "style.qss")
     if os.path.isfile(qss_path):
         cmd += ["--add-data", os.path.abspath(qss_path) + os.pathsep + "ui"]
 
+    prompts_path = os.path.join("src", "prompts.json")
+    if os.path.isfile(prompts_path):
+        cmd += ["--add-data", os.path.abspath(prompts_path) + os.pathsep + "."]
+
     cmd.append(str(source[0]))
 
-    print("Running PyInstaller ...")
+    print(f"Running PyInstaller [{variant}] ...")
     print(" ".join(cmd))
     subprocess.check_call(cmd)
 
 
 # -- Action: copy PDFs into the frozen bundle ----------------------------------
 def _copy_docs(target, source, env):
-    if os.path.exists(DOCS_DEST):
-        shutil.rmtree(DOCS_DEST)
-    os.makedirs(DOCS_DEST, exist_ok=True)
+    variant   = env["TORCH_VARIANT"]
+    docs_dest = os.path.join(BIN_DIR, f"{APP_NAME}_{variant}", "docs")
+
+    if os.path.exists(docs_dest):
+        shutil.rmtree(docs_dest)
+    os.makedirs(docs_dest, exist_ok=True)
 
     for _, stem in ADOC_SOURCES:
         pdf_src = os.path.join(_DOCS_BUILD_DIR, f"{stem}.pdf")
         if os.path.isfile(pdf_src):
-            dest = os.path.join(DOCS_DEST, f"{stem}.pdf")
+            dest = os.path.join(docs_dest, f"{stem}.pdf")
             print(f"Copying  {pdf_src}  ->  {dest}")
             shutil.copy2(pdf_src, dest)
         else:
@@ -208,10 +232,26 @@ def _copy_docs(target, source, env):
         fh.write("docs copied\n")
 
 
+# -- Action: install torch variant into the venv --------------------------------
+def _install_torch(target, source, env):
+    py          = _python()
+    variant     = env["TORCH_VARIANT"]
+    index_url   = TORCH_VARIANTS[variant]
+    print(f"Installing torch [{variant}] from {index_url} ...")
+    subprocess.check_call([
+        py, "-m", "pip", "install", "torch", "torchvision",
+        "--index-url", index_url,
+    ])
+    with open(str(target[0]), "w", encoding="utf-8") as fh:
+        fh.write(index_url + "\n")
+
+
 # -- Action: create console SFX installer (7zCon.sfx, no UAC) -----------------
 def _create_sfx(target, source, env):
     seven_zip     = _find_7zip()
     seven_zip_dir = os.path.dirname(seven_zip)
+    variant       = env["TORCH_VARIANT"]
+    app_bundle    = f"{APP_NAME}_{variant}"
 
     sfx_candidates = [
         os.path.join(seven_zip_dir, "7zCon.sfx"),
@@ -226,23 +266,23 @@ def _create_sfx(target, source, env):
             + "\n".join(f"  {p}" for p in sfx_candidates)
         )
 
-    # Pack dist/SnapshotPackCreator/ into a 7z archive
-    archive_abs = os.path.abspath(SFX_ARCHIVE)
+    archive_abs = os.path.abspath(
+        os.path.join(SPEC_DIR, f"bundle_{variant}.7z")
+    )
     os.makedirs(os.path.dirname(archive_abs), exist_ok=True)
     if os.path.isfile(archive_abs):
         os.remove(archive_abs)
 
-    print(f"Creating 7z archive  ->  {archive_abs}")
+    print(f"Creating 7z archive [{variant}]  ->  {archive_abs}")
     subprocess.check_call(
-        [seven_zip, "a", "-t7z", "-mx=5", "-mmt=on", archive_abs, APP_NAME,
+        [seven_zip, "a", "-t7z", "-mx=5", "-mmt=on", archive_abs, app_bundle,
          "-xr!.copied"],
         cwd=os.path.abspath(BIN_DIR),
     )
 
-    # Concatenate SFX module + archive -> installer exe
     sfx_exe = str(target[0])
     os.makedirs(os.path.dirname(sfx_exe) or ".", exist_ok=True)
-    print(f"Building SFX  ->  {sfx_exe}")
+    print(f"Building SFX [{variant}]  ->  {sfx_exe}")
     with open(sfx_exe, "wb") as out:
         for part in (sfx_module, archive_abs):
             with open(part, "rb") as inp:
@@ -257,7 +297,7 @@ def _create_sfx(target, source, env):
 env = Environment(ENV=os.environ)  # type: ignore
 
 
-# -- Target 0: patch _version.py -----------------------------------------------
+# -- Target 0: patch _version.py  (shared, run once) --------------------------
 _version_sentinel = os.path.join("build", "_version.ok")
 
 patch_version = env.Command(
@@ -268,7 +308,7 @@ patch_version = env.Command(
 env.AlwaysBuild(patch_version)
 
 
-# -- Target 1: convert AsciiDoc files to PDF -----------------------------------
+# -- Target 1: convert AsciiDoc files to PDF  (shared, run once) --------------
 _docs_sentinel = os.path.join(_DOCS_BUILD_DIR, ".docs.ok")
 
 build_docs = env.Command(
@@ -279,36 +319,191 @@ build_docs = env.Command(
 env.AlwaysBuild(build_docs)
 
 
-# -- Target 2: freeze with PyInstaller -----------------------------------------
-_exe_sentinel = os.path.join(APP_DIR, f"{APP_NAME}.exe")
+# -- Targets 2-5: per-variant  (install torch → freeze → copy docs → sfx) ----
+all_sfx = []
+_prev_install = None   # enforce sequential torch installs
 
-pyinstaller_build = env.Command(
-    target = _exe_sentinel,
-    source = [ENTRY_POINT, patch_version],
-    action = _run_pyinstaller,
-)
-env.AlwaysBuild(pyinstaller_build)
+for _variant in _build_variants:
+    _venv      = env.Clone()
+    _venv["TORCH_VARIANT"] = _variant
+
+    _app_dir     = os.path.join(BIN_DIR, f"{APP_NAME}_{_variant}")
+    _exe_sentinel = os.path.join(_app_dir, f"{APP_NAME}_{_variant}.exe")
+    _docs_bundle  = os.path.join(_app_dir, "docs", ".copied")
+    _sfx_exe      = os.path.join(BIN_DIR, f"{APP_NAME}_{BUILD_VERSION}_{_variant}_installer.exe")
+    _torch_stamp  = os.path.join("build", f".torch_{_variant}.ok")
+
+    # Step 2: install torch variant
+    install_torch = _venv.Command(
+        target = _torch_stamp,
+        source = [],
+        action = _install_torch,
+    )
+    _venv.AlwaysBuild(install_torch)
+    _venv.Depends(install_torch, patch_version)
+    if _prev_install is not None:
+        # Don't overlap torch installs — wait for the previous variant to finish
+        _venv.Depends(install_torch, _prev_install)
+    _prev_install = install_torch
+
+    # Step 3: freeze with PyInstaller
+    pyinstaller_build = _venv.Command(
+        target = _exe_sentinel,
+        source = [ENTRY_POINT, install_torch],
+        action = _run_pyinstaller,
+    )
+    _venv.AlwaysBuild(pyinstaller_build)
+
+    # Step 4: copy PDFs into frozen bundle
+    copy_docs_node = _venv.Command(
+        target = _docs_bundle,
+        source = [pyinstaller_build, build_docs],
+        action = _copy_docs,
+    )
+
+    # Step 5: create SFX installer
+    sfx_node = _venv.Command(
+        target = _sfx_exe,
+        source = copy_docs_node,
+        action = _create_sfx,
+    )
+    all_sfx.append(sfx_node)
 
 
-# -- Target 3: copy PDFs into frozen bundle ------------------------------------
-_docs_bundle_sentinel = os.path.join(DOCS_DEST, ".copied")
+# -- Plugins: packaged as separate SFX installers, never bundled into the app -
+#
+# plugins/ is intentionally excluded from the PyInstaller bundle above (no
+# --add-data entry). Instead each plugin folder under plugins/ gets its own
+# torch-independent SFX installer that the user extracts into plugins\.
 
-copy_docs = env.Command(
-    target = _docs_bundle_sentinel,
-    source = [pyinstaller_build, build_docs],
-    action = _copy_docs,
-)
+PLUGINS_DIR = "plugins"
 
 
-# -- Target 4: create SFX installer -------------------------------------------
-create_sfx = env.Command(
-    target = SFX_EXE,
-    source = copy_docs,
-    action = _create_sfx,
-)
+def _discover_plugins():
+    if not os.path.isdir(PLUGINS_DIR):
+        return []
+    names = []
+    for entry in sorted(os.listdir(PLUGINS_DIR)):
+        entry_path = os.path.join(PLUGINS_DIR, entry)
+        if os.path.isdir(entry_path) and os.path.isfile(os.path.join(entry_path, "__init__.py")):
+            names.append(entry)
+    return names
+
+
+def _create_plugin_sfx(target, source, env):
+    seven_zip     = _find_7zip()
+    seven_zip_dir = os.path.dirname(seven_zip)
+    plugin_name   = env["PLUGIN_NAME"]
+
+    sfx_candidates = [
+        os.path.join(seven_zip_dir, "7zCon.sfx"),
+        os.path.join("tools", "7zCon.sfx"),
+    ]
+    sfx_module = next((p for p in sfx_candidates if os.path.isfile(p)), None)
+    if sfx_module is None:
+        raise FileNotFoundError(
+            "7zCon.sfx (console SFX module, no UAC) not found.\n"
+            "Download the '7-Zip Extra' package from https://www.7-zip.org/download.html\n"
+            "and place 7zCon.sfx in one of:\n"
+            + "\n".join(f"  {p}" for p in sfx_candidates)
+        )
+
+    archive_abs = os.path.abspath(os.path.join(SPEC_DIR, f"plugin_{plugin_name}.7z"))
+    os.makedirs(os.path.dirname(archive_abs), exist_ok=True)
+    if os.path.isfile(archive_abs):
+        os.remove(archive_abs)
+
+    print(f"Creating 7z archive for plugin [{plugin_name}]  ->  {archive_abs}")
+    subprocess.check_call(
+        [seven_zip, "a", "-t7z", "-mx=5", "-mmt=on", archive_abs, plugin_name,
+         "-xr!__pycache__", "-xr!*.pyc"],
+        cwd=os.path.abspath(PLUGINS_DIR),
+    )
+
+    sfx_exe = str(target[0])
+    os.makedirs(os.path.dirname(sfx_exe) or ".", exist_ok=True)
+    print(f"Building plugin SFX [{plugin_name}]  ->  {sfx_exe}")
+    with open(sfx_exe, "wb") as out:
+        for part in (sfx_module, archive_abs):
+            with open(part, "rb") as inp:
+                shutil.copyfileobj(inp, out)
+
+    print(f"\nPlugin installer ready:  {sfx_exe}")
+    print(f"  Extract into plugins\\ : {os.path.basename(sfx_exe)} -o\"plugins\"")
+
+
+all_plugin_sfx = []
+for _plugin_name in _discover_plugins():
+    _plugin_sfx_exe = os.path.join(
+        BIN_DIR, f"{_plugin_name}_{BUILD_VERSION}_installer.exe"
+    )
+    _plugin_env = env.Clone()
+    _plugin_env["PLUGIN_NAME"] = _plugin_name
+    _plugin_sources = glob.glob(os.path.join(PLUGINS_DIR, _plugin_name, "**", "*"), recursive=True)
+    plugin_sfx_node = _plugin_env.Command(
+        target = _plugin_sfx_exe,
+        source = _plugin_sources,
+        action = _create_plugin_sfx,
+    )
+    all_plugin_sfx.append(plugin_sfx_node)
 
 
 # -- Default + clean -----------------------------------------------------------
-env.Default(create_sfx)
+env.Default(all_sfx)
+env.Default(all_plugin_sfx)
 
-env.Clean(create_sfx, [BIN_DIR, WORK_DIR, SPEC_DIR])
+_clean_paths = [BIN_DIR, WORK_DIR, SPEC_DIR]
+env.Clean(all_sfx, _clean_paths)
+env.Clean(all_plugin_sfx, _clean_paths)
+
+
+# -- Post-build: restore venv torch for the dev machine -----------------------
+def _restore_dev_torch(target, source, env):
+    """Re-install the machine-correct torch after all variant builds finish.
+
+    After building multiple variants the venv is left with the last variant's
+    torch.  This step re-detects the GPU (same logic as cli.bat) and puts the
+    right wheel back so the dev environment still works.
+    """
+    import subprocess as _sp
+    py = _python()
+
+    # Detect GPU via wmic (Windows only; skip gracefully on other platforms).
+    gpu_name = ""
+    try:
+        out = _sp.check_output(
+            ["wmic", "path", "win32_VideoController", "get", "name"],
+            stderr=_sp.DEVNULL, text=True,
+        )
+        lines = [l.strip() for l in out.splitlines() if l.strip() and l.strip().lower() != "name"]
+        if lines:
+            gpu_name = lines[0]
+    except Exception:
+        pass
+
+    if "RTX 5080" in gpu_name:
+        index_url = TORCH_VARIANTS["cu128"]
+        label = "cu128 (RTX 5080)"
+    elif "NVIDIA" in gpu_name:
+        index_url = TORCH_VARIANTS["cu121"]
+        label = f"cu121 ({gpu_name.strip()})"
+    else:
+        index_url = TORCH_VARIANTS["cpu"]
+        label = "cpu-only"
+
+    print(f"\nRestoring dev-venv torch: {label}  ({index_url})")
+    _sp.check_call([py, "-m", "pip", "install", "torch", "torchvision",
+                    "--index-url", index_url])
+    with open(str(target[0]), "w", encoding="utf-8") as fh:
+        fh.write(label + "\n")
+    print("Dev-venv torch restored.")
+
+
+_restore_stamp = os.path.join("build", ".torch_dev_restored.ok")
+restore_torch = env.Command(
+    target = _restore_stamp,
+    source = all_sfx,
+    action = _restore_dev_torch,
+)
+env.AlwaysBuild(restore_torch)
+env.Default(restore_torch)

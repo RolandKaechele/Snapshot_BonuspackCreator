@@ -28,6 +28,17 @@ def _make_plugin_module(plugins_dir, name, register_body="app.registered.append(
         f.write(f"name = '{name}'\ndef register(app):\n    {register_body}\n")
 
 
+def _make_plugin_package_with_metadata(plugins_dir, name, version, description):
+    pkg = os.path.join(plugins_dir, name)
+    os.makedirs(pkg, exist_ok=True)
+    with open(os.path.join(pkg, "__init__.py"), "w", encoding="utf-8") as f:
+        f.write(
+            f'"""{description}"""\n\n'
+            f'__version__ = "{version}"\n\n'
+            "def register(app):\n    pass\n"
+        )
+
+
 # ── tests ─────────────────────────────────────────────────────────────────────
 
 def test_empty_plugins_dir_loads_nothing(tmp_path):
@@ -60,6 +71,28 @@ def test_loads_package_plugin(monkeypatch, tmp_path):
 
     assert "myplugin" in ps.loaded_plugin_names()
     assert "myplugin" in app.registered
+
+
+def test_plugin_info_reports_version_and_description(monkeypatch, tmp_path):
+    plugins_dir = str(tmp_path / "plugins")
+    os.makedirs(plugins_dir)
+    _make_plugin_package_with_metadata(plugins_dir, "metaplugin", "2.1.0", "Does something useful.")
+
+    app = _FakeApp()
+    ps = PluginSystem(app)
+    monkeypatch.setattr("modules.plugin_system._PLUGINS_DIR", plugins_dir)
+    ps.load_plugins()
+
+    info = ps.plugin_info("metaplugin")
+    assert info["version"] == "2.1.0"
+    assert info["description"] == "Does something useful."
+
+
+def test_plugin_info_defaults_when_unknown(monkeypatch, tmp_path):
+    app = _FakeApp()
+    ps = PluginSystem(app)
+    info = ps.plugin_info("nonexistent")
+    assert info == {"version": "", "description": ""}
 
 
 def test_loads_module_plugin(monkeypatch, tmp_path):

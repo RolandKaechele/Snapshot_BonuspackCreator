@@ -1,5 +1,6 @@
 """Pack Info Widget — pack-level metadata, defaults, and special traits."""
 
+import os
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import (  # type: ignore
@@ -12,6 +13,8 @@ from PyQt6.QtCore import Qt, QUrl, pyqtSignal  # type: ignore
 
 from app_debug import dlog as _dlog
 from modules.tooltips import set_tip
+from modules.photo_registry import default_registry_path, load_registry, compute_photo_ids, find_conflicts
+from ui.dialogs import show_info, show_warning
 
 if TYPE_CHECKING:
     from modules.pack_manager import PackManager
@@ -125,11 +128,17 @@ class PackInfoWidget(QWidget):
         idrange_widget = QWidget()
         idrange_widget.setLayout(idrange_row)
 
+        self._btn_verify = QPushButton("✓ Verify Photo IDs")
+        set_tip(self._btn_verify, "pack_verify_photo_ids")
+        self._btn_verify.setFixedWidth(160)
+        self._btn_verify.clicked.connect(self._on_verify_photo_ids)
+
         form.addRow("Pack ID:", self._edit_id)
         form.addRow("Title:", self._edit_title)
         form.addRow("Game:", self._cmb_game)
         form.addRow("Pack Type:", self._cmb_type)
         form.addRow("ID Range:", idrange_widget)
+        form.addRow("", self._btn_verify)
 
         self._edit_id.textChanged.connect(self._save_identity)
         self._edit_title.textChanged.connect(self._save_identity)
@@ -191,8 +200,9 @@ class PackInfoWidget(QWidget):
         # Theme color: swatch + hex + picker
         theme_color_row = QHBoxLayout()
         theme_color_row.setContentsMargins(0, 0, 0, 0)
-        self._lbl_theme_color_swatch = QLabel("⬛")
-        self._lbl_theme_color_swatch.setFixedWidth(22)
+        self._lbl_theme_color_swatch = QLabel()
+        self._lbl_theme_color_swatch.setFixedSize(22, 22)
+        self._lbl_theme_color_swatch.setStyleSheet("border: 1px solid #666;")
         self._edit_def_theme_color = QLineEdit()
         self._edit_def_theme_color.setPlaceholderText("#1bc2e6")
         self._btn_theme_color_pick = QPushButton("Pick…")
@@ -251,8 +261,9 @@ class PackInfoWidget(QWidget):
         # Color row: swatch + hex field + picker button
         color_row = QHBoxLayout()
         color_row.setContentsMargins(0, 0, 0, 0)
-        self._lbl_color_swatch = QLabel("⬛")
-        self._lbl_color_swatch.setFixedWidth(22)
+        self._lbl_color_swatch = QLabel()
+        self._lbl_color_swatch.setFixedSize(22, 22)
+        self._lbl_color_swatch.setStyleSheet("border: 1px solid #666;")
         self._edit_cat_color = QLineEdit()
         self._edit_cat_color.setPlaceholderText("#dea3a5")
         set_tip(self._edit_cat_color, "special_category_color")
@@ -342,12 +353,11 @@ class PackInfoWidget(QWidget):
     def _on_color_text_changed(self, text: str) -> None:
         color = QColor(text.strip())
         if color.isValid():
-            r, g, b = color.red(), color.green(), color.blue()
             self._lbl_color_swatch.setStyleSheet(
-                f"color: rgb({r},{g},{b}); font-size: 18px;"
+                f"background-color: {color.name()}; border: 1px solid #666;"
             )
         else:
-            self._lbl_color_swatch.setStyleSheet("font-size: 18px;")
+            self._lbl_color_swatch.setStyleSheet("border: 1px solid #666;")
         self._save_special_category()
 
     def _on_pick_theme_color(self) -> None:
@@ -361,12 +371,11 @@ class PackInfoWidget(QWidget):
     def _on_theme_color_changed(self, text: str) -> None:
         color = QColor(text.strip())
         if color.isValid():
-            r, g, b = color.red(), color.green(), color.blue()
             self._lbl_theme_color_swatch.setStyleSheet(
-                f"color: rgb({r},{g},{b}); font-size: 18px;"
+                f"background-color: {color.name()}; border: 1px solid #666;"
             )
         else:
-            self._lbl_theme_color_swatch.setStyleSheet("font-size: 18px;")
+            self._lbl_theme_color_swatch.setStyleSheet("border: 1px solid #666;")
         self._save_defaults()
 
     # ── Game visibility ───────────────────────────────────────────────────
@@ -444,6 +453,58 @@ class PackInfoWidget(QWidget):
         self._pm.set("pack_type", type_map.get(self._cmb_type.currentIndex(), "photos"))
         self._pm.set("id_range", self._edit_idrange.text().strip())
         self.game_changed.emit(game)
+
+    def _on_verify_photo_ids(self) -> None:
+        game = self._pm.get("game", "snapshot")
+        pack_name = self._pm.get("id", "").strip()
+        id_range = self._pm.get("id_range", "").strip()
+        photo_names = [p.get("name", "") for p in self._pm.data.get("photos", []) if p.get("name")]
+
+        if not pack_name:
+            show_warning(self, "Verify Photo IDs", "Set a Pack ID before verifying.",
+                        tag="PackInfoWidget._on_verify_photo_ids")
+            return
+        if not id_range:
+            show_warning(self, "Verify Photo IDs", "Set an ID Range before verifying.",
+                        tag="PackInfoWidget._on_verify_photo_ids")
+            return
+
+        photo_ids = compute_photo_ids(id_range, photo_names)
+        if not photo_ids:
+            show_warning(self, "Verify Photo IDs",
+                        "ID Range is invalid (expected START-END) or the pack has no photos.",
+                        tag="PackInfoWidget._on_verify_photo_ids")
+            return
+
+        registry_path = default_registry_path()
+        if not os.path.exists(registry_path):
+            show_warning(self, "Verify Photo IDs",
+                        "No photo ID registry found.\n"
+                        f"Run tools\\scan_photo_registry.py to build one at:\n{registry_path}",
+                        tag="PackInfoWidget._on_verify_photo_ids")
+            return
+
+        registry = load_registry(registry_path)
+        conflicts = find_conflicts(registry, game, pack_name, photo_ids)
+        _dlog("PackInfoWidget._on_verify_photo_ids",
+              f"{len(photo_ids)} photo IDs checked, {len(conflicts)} conflicts")
+
+        if not conflicts:
+            show_info(self, "Verify Photo IDs",
+                      f"No conflicts found.\nChecked {len(photo_ids)} photo IDs against the registry.",
+                      tag="PackInfoWidget._on_verify_photo_ids")
+            return
+
+        lines = [f"{len(conflicts)} photo ID conflict(s) found:", ""]
+        for entry in conflicts[:50]:
+            lines.append(
+                f"  \u2022 ID {entry['photo_id']} already used by pack "
+                f"'{entry['pack_name']}' (photo '{entry['photo_name']}')"
+            )
+        if len(conflicts) > 50:
+            lines.append(f"  ... and {len(conflicts) - 50} more")
+        show_warning(self, "Verify Photo IDs", "\n".join(lines),
+                    tag="PackInfoWidget._on_verify_photo_ids")
 
     def _save_defaults(self) -> None:
         self._pm.set("defaults_position", self._cmb_def_pos.currentText())

@@ -1,5 +1,6 @@
 """Pack manager — Load and Save the pack project JSON."""
 
+import copy
 import json
 import os
 import shutil
@@ -7,6 +8,10 @@ import tempfile
 from typing import Any
 
 from app_debug import dlog as _dlog
+
+# Photo/image-path fields that get relative/absolute conversion on save/load.
+_PATH_LIST_KEYS = ("overlays", "textures", "love_lens_photos")
+_PATH_ENTRY_LIST_KEYS = ("photos", "events")
 
 
 class _DirtyDict(dict):
@@ -117,6 +122,8 @@ class PackManager:
         # Merge with defaults so old files gain new keys
         merged = dict(_EMPTY_PACK)
         merged.update(loaded)
+        pack_dir = os.path.dirname(os.path.abspath(path))
+        self._resolve_relative_paths(merged, pack_dir)
         self._data = self._make_dirty_dict(merged)
         self._path = path
         self._dirty = False
@@ -125,11 +132,52 @@ class PackManager:
     def save(self, path: str) -> None:
         pack_dir = os.path.dirname(os.path.abspath(path))
         self._relocate_ai_images(pack_dir)
+        to_dump = copy.deepcopy(dict(self._data))
+        self._make_relative_paths(to_dump, pack_dir)
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(self._data, f, indent=2, ensure_ascii=False)
+            json.dump(to_dump, f, indent=2, ensure_ascii=False)
         self._path = path
         self._dirty = False
         _dlog("PackManager.save", f"Saved {path}")
+
+    @staticmethod
+    def _to_relative(path: str, pack_dir: str) -> str:
+        """Return `path` relative to `pack_dir` when it lives inside the pack folder."""
+        if not path or not os.path.isabs(path):
+            return path
+        abs_path = os.path.abspath(path)
+        norm_dir = os.path.normcase(pack_dir)
+        norm_path = os.path.normcase(abs_path)
+        if norm_path == norm_dir or norm_path.startswith(norm_dir + os.sep):
+            return os.path.relpath(abs_path, pack_dir)
+        return path
+
+    @staticmethod
+    def _to_absolute(path: str, pack_dir: str) -> str:
+        """Resolve a relative `path` (as stored in the JSON) against `pack_dir`."""
+        if not path or os.path.isabs(path):
+            return path
+        return os.path.normpath(os.path.join(pack_dir, path))
+
+    def _make_relative_paths(self, data: dict, pack_dir: str) -> None:
+        """Convert in-pack image paths to relative paths before writing to disk."""
+        for list_key in _PATH_ENTRY_LIST_KEYS:
+            for entry in data.get(list_key, []):
+                if entry.get("source"):
+                    entry["source"] = self._to_relative(entry["source"], pack_dir)
+        for dict_key in _PATH_LIST_KEYS:
+            for slot, paths in data.get(dict_key, {}).items():
+                data[dict_key][slot] = [self._to_relative(p, pack_dir) for p in paths]
+
+    def _resolve_relative_paths(self, data: dict, pack_dir: str) -> None:
+        """Resolve relative image paths (loaded from JSON) back to absolute paths."""
+        for list_key in _PATH_ENTRY_LIST_KEYS:
+            for entry in data.get(list_key, []):
+                if entry.get("source"):
+                    entry["source"] = self._to_absolute(entry["source"], pack_dir)
+        for dict_key in _PATH_LIST_KEYS:
+            for slot, paths in data.get(dict_key, {}).items():
+                data[dict_key][slot] = [self._to_absolute(p, pack_dir) for p in paths]
 
     def _relocate_ai_images(self, pack_dir: str) -> None:
         """Move any AI-generated images from the temp dir into the pack folder."""

@@ -1,6 +1,8 @@
 """Picture Widget — add, remove, preview, manage overlay and texture slots."""
 
+import math
 import os
+import shutil
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import ( #type: ignore
@@ -17,23 +19,52 @@ from modules.image_utils import ASSET_FILTER, load_pixmap
 from modules.tooltips import set_tip
 from ui.image_viewer import attach_viewer
 from modules.ai_image_gen import open_ai_generate_dialog
+from ui.dialogs import show_file_removal_choice
 
 if TYPE_CHECKING:
     from modules.pack_manager import PackManager
 
+
+def get_rare_photo_warning(pack_data: dict) -> str | None:
+    """Return a warning message when more Snapshot photos are marked 'rare' than the
+    game allows (limit = ceil(photoCount / 10)); excess ones are silently downgraded
+    to 'none' by the game, so this is advisory only, not export-blocking."""
+    photos = pack_data.get("photos", [])
+    total = len(photos)
+    if total == 0:
+        return None
+    limit = math.ceil(total / 10)
+    rare_count = sum(1 for p in photos if p.get("color") == "rare")
+    if rare_count <= limit:
+        return None
+    return (
+        f"{rare_count} photo(s) are marked 'rare', but this pack only allows {limit} "
+        f"(ceil({total} photos / 10)).\n"
+        "Excess rare photos will be silently downgraded to 'none' by the game."
+    )
+
 # ── Value tables ─────────────────────────────────────────────────────────────
 
 SNAPSHOT_POSITIONS = [
-    ("upskirt", "Upskirt Shot"), ("jogger", "Jogger Photo"), ("xray", "X-Ray Upskirt"),
-    ("xJogger", "X-Ray Jogger"), ("xBench", "X-Ray Bench"),
+    ("upskirt", "Upskirt Shot"), 
+    ("jogger", "Jogger Photo"), 
+    ("xray", "X-Ray Upskirt"),
+    ("xJogger", "X-Ray Jogger"), 
+    ("xBench", "X-Ray Bench"),
     ("xBar", "X-Ray Bar Photo (X-Ray Barstool)"),
-    ("bench", "Bench Photo"), ("bar", "Bar Photo (Barstool)"),
+    ("bench", "Bench Photo"), 
+    ("bar", "Bar Photo (Barstool)"),
     ("photoBooth", "Photo Booth"),
-    ("flasher", "Flasher (Yoruko Task)"), ("window", "Window (Yoruko Task)"),
-    ("angry", "Busted Photo"), ("police", "Police Upskirt"),
-    ("xPolice", "Police X-ray Shot"), ("remote", "Signal Hijacker Upskirt"),
-    ("rPolice", "Signal Hijacker Police"), ("rJogger", "Signal Hijacker Jogger"),
-    ("rBench", "Signal Hijacker Bench"), ("event", "City Event Photo"),
+    ("flasher", "Flasher (Yoruko Task)"), 
+    ("window", "Window (Yoruko Task)"),
+    ("angry", "Busted Photo"), 
+    ("police", "Police Upskirt"),
+    ("xPolice", "Police X-ray Shot"), 
+    ("remote", "Signal Hijacker Upskirt"),
+    ("rPolice", "Signal Hijacker Police"), 
+    ("rJogger", "Signal Hijacker Jogger"),
+    ("rBench", "Signal Hijacker Bench"), 
+    ("event", "City Event Photo"),
     ("hypno", "Love Lens Photo"),
 ]
 
@@ -241,6 +272,11 @@ class PictureWidget(QWidget):
         wtype = "photos_lewdshores" if self._pm.get("game") == "lewdshores" else "photos"
         open_ai_generate_dialog(self, wtype, self._on_ai_accepted, output_dir=None)
 
+    def update_ai_availability(self) -> None:
+        """Hide the AI Generate button when no diffusion plugin is available."""
+        from modules.ai_image_gen import has_any_backend
+        self._btn_ai.setVisible(has_any_backend())
+
     def _on_ai_accepted(self, type_map: dict) -> None:
         default_type = "none" if self._pm.get("game") == "lewdshores" else "plain"
         # Move selected images from temp into the pack folder right away.
@@ -300,7 +336,36 @@ class PictureWidget(QWidget):
         )
         if not rows:
             return
+        photos: list = self._pm.data.get("photos", [])
         for row in rows:
+            if not (0 <= row < len(photos)):
+                continue
+            source = photos[row].get("source")
+            if source and os.path.isfile(source):
+                choice = show_file_removal_choice(
+                    self, "Remove Image",
+                    f"Remove '{os.path.basename(source)}' from the pack.\n\n"
+                    "What should happen to the image file on disk?",
+                    tag="PictureWidget._on_remove_selected",
+                )
+                if choice == "cancel":
+                    continue
+                if choice == "delete":
+                    try:
+                        os.remove(source)
+                    except OSError as exc:
+                        _dlog("PictureWidget._on_remove_selected", f"delete failed: {exc}")
+                elif choice == "move":
+                    pack_path = self._pm.current_path
+                    start_dir = os.path.dirname(pack_path) if pack_path else ""
+                    dest_dir = QFileDialog.getExistingDirectory(
+                        self, "Move Image To Folder Inside Pack", start_dir
+                    )
+                    if dest_dir:
+                        try:
+                            shutil.move(source, os.path.join(dest_dir, os.path.basename(source)))
+                        except OSError as exc:
+                            _dlog("PictureWidget._on_remove_selected", f"move failed: {exc}")
             self._pm.remove_photo(row)
         self._rebuild_list()
 

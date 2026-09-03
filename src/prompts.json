@@ -1,0 +1,402 @@
+{
+  "NEGATIVE_PROMPT": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters",
+  "PHOTO_TYPES": {
+    "upskirt": {
+      "label": "Upskirt Shot",
+      "prompt_enhancement": "nsfw, low angle upskirt shot, panties clearly visible, short pleated skirt, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "jogger": {
+      "label": "Jogger Photo",
+      "prompt_enhancement": "nsfw, jogging pose, sports bra, spandex shorts, dynamic running motion, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "xray": {
+      "label": "X-Ray Upskirt",
+      "prompt_enhancement": "nsfw, x-ray vision style, see-through skirt, panties visible, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "bench": {
+      "label": "Bench Photo",
+      "prompt_enhancement": "nsfw, sitting on park bench, legs together, short skirt, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "bar": {
+      "label": "Bar Photo (Barstool)",
+      "prompt_enhancement": "nsfw, sitting on barstool at bar counter, cocktail dress, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "photoBooth": {
+      "label": "Photo Booth",
+      "prompt_enhancement": "nsfw, inside photo booth, striped curtain background, cute pose, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "event": {
+      "label": "City Event Photo",
+      "prompt_enhancement": "nsfw, outdoor city event, crowd in background, casual clothing, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "hypno": {
+      "label": "Love Lens / Hypno Photo",
+      "prompt_enhancement": "nsfw, hypnotic spiral eyes, dazed blissful expression, standing pose, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "police": {
+      "label": "Police Upskirt",
+      "prompt_enhancement": "nsfw, female police officer uniform, skirt, upskirt angle, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "flasher": {
+      "label": "Flasher (Yoruko Task)",
+      "prompt_enhancement": "nsfw, opening coat to flash, mischievous smile, trench coat, anime style, high qualitynaked body, exposed breasts, exposed genitals",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "window": {
+      "label": "Window (Yoruko Task)",
+      "prompt_enhancement": "nsfw, standing at open window, anime style, high qualitynaked body, exposed breasts, exposed genitalscaught in the act, surprised expression, looking outside, sex tools",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    }
+  },
+  "LOVE_LENS_TYPES": {
+    "standing_topless": {
+      "label": "Standing Topless",
+      "prompt_enhancement": "nsfw, standing upright, topless, bare chest, confident pose, full body, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "standing_nude": {
+      "label": "Standing Nude",
+      "prompt_enhancement": "nsfw, standing upright, fully nude, tasteful pose, full body, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "kneeling_cum_mouth": {
+      "label": "Kneeling – Cum in Mouth",
+      "prompt_enhancement": "nsfw, kneeling pose, mouth open, ahegao expression, cum in mouth, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "kneeling_cum_face": {
+      "label": "Kneeling – Cum on Face",
+      "prompt_enhancement": "nsfw, kneeling pose, cum on face, satisfied expression, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "leaning_cum_butt": {
+      "label": "Leaning – Cum on Butt",
+      "prompt_enhancement": "nsfw, leaning forward, cum dripping on buttocks, rear view, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "leaning_cum_vagina": {
+      "label": "Leaning – Cum in Vagina",
+      "prompt_enhancement": "nsfw, leaning forward pose, cum dripping from vagina, rear view, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "leaning_cum_anus": {
+      "label": "Leaning – Cum in Anus",
+      "prompt_enhancement": "nsfw, leaning forward pose, cum dripping from anus, rear view, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    }
+  },
+  "EVENT_TYPES": {
+    "alley_night": {
+      "label": "Dark Alley – Night",
+      "prompt_enhancement": "nsfw, dark alley, night-time, neon signs reflected on wet pavement, cyberpunk atmosphere, anime background, no characters, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "city_street_day": {
+      "label": "City Street – Day",
+      "prompt_enhancement": "nsfw, busy city street, daytime, shop-lined sidewalk, pedestrians, anime background, no characters in foreground, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "park_day": {
+      "label": "Park – Day",
+      "prompt_enhancement": "nsfw, city park, sunny day, trees, park benches, birds, anime background, no characters, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "school_grounds": {
+      "label": "School Grounds",
+      "prompt_enhancement": "nsfw, schoolyard, outside school building, sakura trees, anime background, no characters, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "bar_interior": {
+      "label": "Bar Interior",
+      "prompt_enhancement": "nsfw, bar interior, dim lighting, neon signs, bottles on shelves, bar counter, anime background, no characters, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "office_interior": {
+      "label": "Office Interior",
+      "prompt_enhancement": "nsfw, office interior, desks, computer monitors, city view window, anime background, no characters, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "beach_daytime": {
+      "label": "Beach – Daytime",
+      "prompt_enhancement": "nsfw, beach, ocean waves, white sand, palm trees, sunny sky, anime background, no characters, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "rooftop_night": {
+      "label": "Rooftop – Night",
+      "prompt_enhancement": "nsfw, city rooftop, night-time, glittering skyline, starry sky, anime background, no characters, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    }
+  },
+  "LOVE_LENS_OVERLAY_TYPES": {
+    "overlayStart": {
+      "label": "Overlay – Start",
+      "prompt_enhancement": "nsfw, standing, hypnotic dazed expression, arms relaxed, full body front view, anime style, high quality, transparent background",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "overlayBoob": {
+      "label": "Overlay – Grabbing Breasts",
+      "prompt_enhancement": "nsfw, topless, hands cupping own breasts, ahegao expression, full body front view, anime style, high quality, transparent background",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "overlayPussy": {
+      "label": "Overlay – Grabbing Vagina",
+      "prompt_enhancement": "nsfw, nude, hand between legs touching vagina, blissful expression, full body front view, anime style, high quality, transparent background",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "overlayButt": {
+      "label": "Overlay – Grabbing Butt",
+      "prompt_enhancement": "nsfw, nude, hands on own buttocks, ahegao expression, full body rear view, anime style, high quality, transparent background",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "overlayVaginalStart": {
+      "label": "Overlay – Vaginal Start",
+      "prompt_enhancement": "nsfw, nude, legs slightly apart, anticipating blissful expression, full body front view, anime style, high quality, transparent background",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "overlayVaginalPenetration": {
+      "label": "Overlay – Vaginal Penetration",
+      "prompt_enhancement": "nsfw, nude, vaginal penetration pose, ahegao expression, full body front view, anime style, high quality, transparent background",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "overlayVaginalCum": {
+      "label": "Overlay – Vaginal Cum",
+      "prompt_enhancement": "nsfw, nude, cum dripping from vagina, satisfied ahegao expression, full body front view, anime style, high quality, transparent background",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "overlayAnalStart": {
+      "label": "Overlay – Anal Start",
+      "prompt_enhancement": "nsfw, nude, bent forward slightly, anticipating expression, full body rear view, anime style, high quality, transparent background",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "overlayAnalPenetration": {
+      "label": "Overlay – Anal Penetration",
+      "prompt_enhancement": "nsfw, nude, anal penetration pose, ahegao expression, full body rear view, anime style, high quality, transparent background",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "overlayAnalCum": {
+      "label": "Overlay – Anal Cum",
+      "prompt_enhancement": "nsfw, nude, cum dripping from anus, satisfied ahegao expression, full body rear view, anime style, high quality, transparent background",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    }
+  },
+  "LEWD_SHORES_PHOTO_TYPES": {
+    "beachFront": {
+      "label": "Beach – Front",
+      "prompt_enhancement": "nsfw, standing on beach, ocean background, bikini or swimsuit, front view, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "beachBack": {
+      "label": "Beach – Back",
+      "prompt_enhancement": "nsfw, standing on beach, ocean background, bikini or swimsuit, rear view, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "exposedFront": {
+      "label": "Exposed – Front",
+      "prompt_enhancement": "nsfw, outdoor beach setting, topless or nude, front view, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "exposedBack": {
+      "label": "Exposed – Back",
+      "prompt_enhancement": "nsfw, outdoor beach setting, topless or nude, rear view, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "yoga": {
+      "label": "Yoga",
+      "prompt_enhancement": "nsfw, yoga pose, sports bra, yoga pants, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "shower": {
+      "label": "Shower",
+      "prompt_enhancement": "nsfw, standing in shower, wet body, water droplets, anime style, high quality, sex",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "wc": {
+      "label": "WC",
+      "prompt_enhancement": "nsfw, sitting on toilet, bathroom setting, panties around ankles, anime style, high quality, peeing, urination",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "mermaid": {
+      "label": "Mermaid (Lying on Stomach)",
+      "prompt_enhancement": "nsfw, lying on stomach on beach sand, mermaid pose, bikini or topless, rear view, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "underwater": {
+      "label": "Underwater",
+      "prompt_enhancement": "nsfw, underwater scene, swimming, bubbles, bikini, anime style, high quality, sex",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "police": {
+      "label": "Lifeguard",
+      "prompt_enhancement": "nsfw, lifeguard uniform, standing on beach, confident pose, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "sPolice": {
+      "label": "Sitting Lifeguard",
+      "prompt_enhancement": "nsfw, lifeguard uniform, sitting on lifeguard tower, relaxed pose, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "booth": {
+      "label": "Booth",
+      "prompt_enhancement": "nsfw, inside changing booth, undressing, swimsuit, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "angry": {
+      "label": "Busted",
+      "prompt_enhancement": "nsfw, caught in the act, surprised or embarrassed expression, anime style, high quality",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    }
+  },
+  "SNAPSHOT_PHOTO_MODIFIERS": {
+    "plain": {
+      "label": "Plain",
+      "prompt_enhancement": "plain cotton panties",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "stripes": {
+      "label": "Stripes",
+      "prompt_enhancement": "striped panties",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "dots": {
+      "label": "Dots",
+      "prompt_enhancement": "polka dot panties",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "frill": {
+      "label": "Frill",
+      "prompt_enhancement": "frilly lace panties",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "kinky": {
+      "label": "Kinky",
+      "prompt_enhancement": "kinky harness straps, erotic underwear",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "none": {
+      "label": "None (no underwear)",
+      "prompt_enhancement": "no underwear, bare skin",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "plug": {
+      "label": "Plug",
+      "prompt_enhancement": "butt plug visible",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "piercing": {
+      "label": "Piercing",
+      "prompt_enhancement": "genital piercing visible",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "cum": {
+      "label": "Cum",
+      "prompt_enhancement": "cum on panties",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "nude": {
+      "label": "Nude",
+      "prompt_enhancement": "fully nude, no clothing",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "flashing": {
+      "label": "Flashing",
+      "prompt_enhancement": "flashing, lifting skirt, exposing self",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "sex": {
+      "label": "Sex",
+      "prompt_enhancement": "nsfw explicit, sexual intercourse",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "topless": {
+      "label": "Topless",
+      "prompt_enhancement": "topless, bare breasts exposed",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "dildo": {
+      "label": "Dildo",
+      "prompt_enhancement": "using a dildo",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "mastubrate": {
+      "label": "Masturbate",
+      "prompt_enhancement": "masturbating, hand between legs",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "front": {
+      "label": "Front view",
+      "prompt_enhancement": "front view",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "back": {
+      "label": "Back view",
+      "prompt_enhancement": "rear view, back to camera",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "goth": {
+      "label": "Goth",
+      "prompt_enhancement": "gothic style, black lace lingerie, dark aesthetic",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    }
+  },
+  "LEWD_SHORES_PHOTO_MODIFIERS": {
+    "front view": {
+      "label": "Front View",
+      "prompt_enhancement": "facing camera, front view",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "back view": {
+      "label": "Back View",
+      "prompt_enhancement": "back to camera, rear view",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "butt view": {
+      "label": "Butt View",
+      "prompt_enhancement": "buttocks facing camera, rear view",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "changing": {
+      "label": "Changing",
+      "prompt_enhancement": "mid-change, removing swimsuit",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "cameltoe": {
+      "label": "Cameltoe",
+      "prompt_enhancement": "cameltoe visible through tight swimsuit",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "flashing": {
+      "label": "Flashing",
+      "prompt_enhancement": "flashing, pulling aside swimsuit",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "yoga": {
+      "label": "Yoga Pose",
+      "prompt_enhancement": "yoga pose, flexible stretch",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "mermaid": {
+      "label": "Mermaid (Lying)",
+      "prompt_enhancement": "lying on stomach, mermaid pose",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "booth": {
+      "label": "Booth",
+      "prompt_enhancement": "inside changing booth, curtain visible",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    },
+    "none": {
+      "label": "None",
+      "prompt_enhancement": "",
+      "negative_prompt": "ugly, bad anatomy, blurry, low quality, watermark, text, logo, 2girls, 2boys, multiple girls, multiple boys, group, crowd, extra people, background characters"
+    }
+  }
+}

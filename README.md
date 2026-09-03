@@ -123,5 +123,5 @@ See `docs/developerguide/` for architecture details, module map, plugin API, and
 Run tests:
 
 ```bat
-venv\Scripts\python.exe -m pytest tests\
+venv\Scripts\python.exe -m pytest tests\ plugins\*\tests
 ```

@@ -64,6 +64,10 @@ def build_menubar(window: QMainWindow) -> None:
     act_plugins.triggered.connect(window.on_manage_plugins)
     tools_menu.addAction(act_plugins)
 
+    act_edit_prompts = QAction("Edit AI &Prompts…", window)
+    act_edit_prompts.triggered.connect(window.on_edit_prompts)
+    tools_menu.addAction(act_edit_prompts)
+
     # Help
     help_menu = bar.addMenu("&Help")
 
