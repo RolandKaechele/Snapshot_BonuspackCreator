@@ -182,3 +182,125 @@ def test_dialog_events_has_no_modifier_combo(qtbot, aig):
 # travel with the plugin rather than the core app test suite.
 
 
+# ── Diffusion backend registry ────────────────────────────────────────────────
+
+@pytest.fixture()
+def clean_backend(aig):
+    """Snapshot/restore DIFFUSION_BACKENDS around the test so it's isolated
+    from real plugins (e.g. anima_diffusion) that may have registered
+    themselves earlier in the same pytest session."""
+    saved = dict(aig.DIFFUSION_BACKENDS)
+    aig.DIFFUSION_BACKENDS.clear()
+    yield
+    aig.DIFFUSION_BACKENDS.clear()
+    aig.DIFFUSION_BACKENDS.update(saved)
+
+
+def test_register_diffusion_backend_stores_entry(aig, clean_backend):  # noqa: ARG001
+    worker_factory = lambda *a, **kw: None  # noqa: E731
+    aig.register_diffusion_backend(
+        "_test_backend", "Test Backend",
+        worker_factory=worker_factory,
+        is_available=lambda: True,
+        supports_ip_adapter=True,
+        get_device_info=lambda: "cpu",
+    )
+    entry = aig.DIFFUSION_BACKENDS["_test_backend"]
+    assert entry["label"] == "Test Backend"
+    assert entry["worker_factory"] is worker_factory
+    assert entry["supports_ip_adapter"] is True
+    assert entry["get_device_info"]() == "cpu"
+    assert entry["verify_dialog_cls"] is None
+    assert entry["ref_gen_dialog_cls"] is None
+
+
+def test_register_diffusion_backend_defaults(aig, clean_backend):  # noqa: ARG001
+    aig.register_diffusion_backend("_test_backend", "Test Backend", worker_factory=lambda: None)
+    entry = aig.DIFFUSION_BACKENDS["_test_backend"]
+    assert entry["is_available"]() is True
+    assert entry["supports_ip_adapter"] is False
+    assert entry["get_device_info"]() == ""
+
+
+def test_available_backends_filters_by_is_available(aig, clean_backend):  # noqa: ARG001
+    aig.register_diffusion_backend(
+        "_test_backend", "Test Backend",
+        worker_factory=lambda: None, is_available=lambda: False,
+    )
+    assert "_test_backend" not in aig.available_backends()
+    aig.DIFFUSION_BACKENDS["_test_backend"]["is_available"] = lambda: True
+    assert "_test_backend" in aig.available_backends()
+
+
+def test_has_any_backend_true_when_one_available(aig, clean_backend):  # noqa: ARG001
+    aig.register_diffusion_backend(
+        "_test_backend", "Test Backend",
+        worker_factory=lambda: None, is_available=lambda: True,
+    )
+    assert aig.has_any_backend() is True
+
+
+def test_has_any_backend_false_when_none_available(aig):
+    saved = dict(aig.DIFFUSION_BACKENDS)
+    aig.DIFFUSION_BACKENDS.clear()
+    try:
+        assert aig.has_any_backend() is False
+    finally:
+        aig.DIFFUSION_BACKENDS.clear()
+        aig.DIFFUSION_BACKENDS.update(saved)
+
+
+def test_get_torch_info_returns_first_nonempty(aig, clean_backend):  # noqa: ARG001
+    aig.register_diffusion_backend(
+        "_test_backend", "Test Backend",
+        worker_factory=lambda: None, is_available=lambda: True,
+        get_device_info=lambda: "torch 2.0 | CPU",
+    )
+    assert aig.get_torch_info() == "torch 2.0 | CPU"
+
+
+def test_get_torch_info_empty_when_no_backend_reports_info(aig):
+    saved = dict(aig.DIFFUSION_BACKENDS)
+    aig.DIFFUSION_BACKENDS.clear()
+    try:
+        assert aig.get_torch_info() == ""
+    finally:
+        aig.DIFFUSION_BACKENDS.clear()
+        aig.DIFFUSION_BACKENDS.update(saved)
+
+
+# ── LoRA add-on registry ───────────────────────────────────────────────────────
+
+@pytest.fixture()
+def clean_lora_addons(aig):
+    """Ensure the "_test_backend" LoRA add-on list is absent before and after each test."""
+    aig.LORA_ADDONS.pop("_test_backend", None)
+    yield
+    aig.LORA_ADDONS.pop("_test_backend", None)
+
+
+def test_get_lora_addons_empty_when_none_registered(aig, clean_lora_addons):  # noqa: ARG001
+    assert aig.get_lora_addons("_test_backend") == []
+
+
+def test_register_lora_addon_appends_entry(aig, clean_lora_addons):  # noqa: ARG001
+    aig.register_lora_addon("_test_backend", "/path/to/lora.safetensors", "My LoRA")
+    assert aig.get_lora_addons("_test_backend") == [
+        {"path": "/path/to/lora.safetensors", "label": "My LoRA"}
+    ]
+
+
+def test_register_lora_addon_supports_multiple_entries(aig, clean_lora_addons):  # noqa: ARG001
+    aig.register_lora_addon("_test_backend", "/a.safetensors", "A")
+    aig.register_lora_addon("_test_backend", "/b.safetensors", "B")
+    addons = aig.get_lora_addons("_test_backend")
+    assert [a["label"] for a in addons] == ["A", "B"]
+
+
+def test_get_lora_addons_returns_a_copy(aig, clean_lora_addons):  # noqa: ARG001
+    aig.register_lora_addon("_test_backend", "/a.safetensors", "A")
+    addons = aig.get_lora_addons("_test_backend")
+    addons.append({"path": "/b.safetensors", "label": "B"})
+    assert len(aig.get_lora_addons("_test_backend")) == 1
+
+

@@ -19,7 +19,7 @@ from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTextEdit, QComboBox, QSlider, QListWidget, QListWidgetItem,
-    QSplitter, QWidget, QGroupBox, QFormLayout,
+    QSplitter, QWidget, QGroupBox, QFormLayout, QCheckBox,
     QDialogButtonBox, QProgressBar, QStackedWidget, QSizePolicy,
     QFileDialog, QScrollArea,
 )
@@ -648,6 +648,10 @@ _CHAR_WIDGET_TYPES: frozenset[str] = frozenset(
 # register(app) entry point. See plugins/perchance_diffusion and
 # plugins/anythingxl_diffusion for the reference implementations.
 
+# Preset guidance-scale spread used by the "vary guidance scale" comparison
+# checkbox (see AiImageGenDialog._build_form_page / _on_vary_guidance_toggled).
+_GUIDANCE_SCALE_COMPARISON_VALUES: list[float] = [1.0, 1.5, 2.0, 2.5, 3.5]
+
 DIFFUSION_BACKENDS: dict[str, dict] = {}
 
 
@@ -658,6 +662,7 @@ def register_diffusion_backend(
     worker_factory: Callable,
     is_available: Callable[[], bool] = lambda: True,
     supports_ip_adapter: bool = False,
+    supports_guidance_scale: bool = False,
     get_device_info: Callable[[], str] = lambda: "",
     verify_dialog_cls=None,
     ref_gen_dialog_cls=None,
@@ -668,12 +673,16 @@ def register_diffusion_backend(
     progress/image_ready/finished/error pyqtSignals and an abort() method.
     Local backends may additionally accept ref_image_path, ip_adapter_scale,
     base_image_path, img2img_strength, base_image_map keyword arguments.
+    Backends with supports_guidance_scale=True may additionally accept
+    guidance_scale (float) and/or guidance_scales (list[float], cycled across
+    the n generated images per prompt for side-by-side comparison).
     """
     DIFFUSION_BACKENDS[key] = {
         "label": label,
         "worker_factory": worker_factory,
         "is_available": is_available,
         "supports_ip_adapter": supports_ip_adapter,
+        "supports_guidance_scale": supports_guidance_scale,
         "get_device_info": get_device_info,
         "verify_dialog_cls": verify_dialog_cls,
         "ref_gen_dialog_cls": ref_gen_dialog_cls,
@@ -689,6 +698,27 @@ def available_backends() -> dict[str, dict]:
 def has_any_backend() -> bool:
     """Return True when at least one diffusion backend plugin is available."""
     return bool(available_backends())
+
+
+# ─── LoRA add-on registry ─────────────────────────────────────────────────────
+#
+# Optional LoRA plugins (e.g. plugins/moredetails_lora) register themselves
+# against a base diffusion backend key (e.g. "anylora") instead of providing
+# their own worker; the base backend's worker_factory loads them via
+# pipe.load_lora_weights(path) when present. See plugins/anylora_diffusion.
+
+LORA_ADDONS: dict[str, list[dict]] = {}
+
+
+def register_lora_addon(backend_key: str, path: str, label: str) -> None:
+    """Register a LoRA weights file to be offered as an add-on for backend_key."""
+    LORA_ADDONS.setdefault(backend_key, []).append({"path": path, "label": label})
+    _dlog("ai_image_gen.register_lora_addon", f"registered {label!r} for backend {backend_key!r}: {path!r}")
+
+
+def get_lora_addons(backend_key: str) -> list[dict]:
+    """Return the list of {'path', 'label'} dicts registered for backend_key."""
+    return list(LORA_ADDONS.get(backend_key, []))
 
 
 def get_torch_info() -> str:
@@ -986,6 +1016,43 @@ class AiImageGenDialog(QDialog):
         count_layout.addWidget(self._lbl_n)
         layout.addWidget(count_group)
 
+        # ── Guidance scale (local backends only, e.g. anima_diffusion) ────
+        self._guidance_group = QGroupBox("Guidance Scale  (CFG)")
+        guidance_layout = QVBoxLayout(self._guidance_group)
+        scale_row2 = QHBoxLayout()
+        scale_row2.addWidget(QLabel("Scale:"))
+        self._slider_guidance = QSlider(Qt.Orientation.Horizontal)
+        self._slider_guidance.setRange(5, 100)  # 0.5 .. 10.0
+        self._slider_guidance.setValue(15)  # 1.5 — see repo memory: best results at 1.5-2.0
+        self._slider_guidance.setTickInterval(5)
+        self._slider_guidance.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self._slider_guidance.setToolTip(
+            "Classifier-free guidance strength. Lower \u2192 more natural colours/tones.\n"
+            "Higher \u2192 stronger prompt adherence but can oversaturate or desaturate to lineart."
+        )
+        self._lbl_guidance = QLabel("1.5")
+        self._lbl_guidance.setFixedWidth(32)
+        self._slider_guidance.valueChanged.connect(
+            lambda v: self._lbl_guidance.setText(f"{v / 10:.1f}")
+        )
+        scale_row2.addWidget(self._slider_guidance)
+        scale_row2.addWidget(self._lbl_guidance)
+        guidance_layout.addLayout(scale_row2)
+        self._chk_vary_guidance = QCheckBox(
+            "Vary guidance scale across generated images (for side-by-side comparison)"
+        )
+        self._chk_vary_guidance.setToolTip(
+            f"Instead of using a single scale for all n images, spreads "
+            f"{len(_GUIDANCE_SCALE_COMPARISON_VALUES)} preset scales "
+            f"({', '.join(str(s) for s in _GUIDANCE_SCALE_COMPARISON_VALUES)}) across the generated\n"
+            "images so you can pick your favourite in the results picker.\n"
+            "Requires \u201cNumber of Images\u201d to be at least that many — bumped up automatically."
+        )
+        self._chk_vary_guidance.toggled.connect(self._on_vary_guidance_toggled)
+        guidance_layout.addWidget(self._chk_vary_guidance)
+        layout.addWidget(self._guidance_group)
+        self._guidance_group.setVisible(self._current_backend_supports_guidance_scale())
+
         # ── Character reference image (IP-Adapter, local backend only) ────
         self._ref_group = QGroupBox("Base Image + Character Reference  (IP-Adapter)")
         ref_layout = QVBoxLayout(self._ref_group)
@@ -1158,8 +1225,20 @@ class AiImageGenDialog(QDialog):
         entry = self._backends.get(self._current_backend_key())
         return bool(entry and entry["supports_ip_adapter"])
 
+    def _current_backend_supports_guidance_scale(self) -> bool:
+        entry = self._backends.get(self._current_backend_key())
+        return bool(entry and entry.get("supports_guidance_scale"))
+
+    def _on_vary_guidance_toggled(self, checked: bool) -> None:
+        """Bump "Number of Images" up to at least the comparison-scale count so
+        the vary-guidance feature actually produces one image per scale instead
+        of silently only using the first scale when n is too small."""
+        if checked and self._slider.value() < len(_GUIDANCE_SCALE_COMPARISON_VALUES):
+            self._slider.setValue(len(_GUIDANCE_SCALE_COMPARISON_VALUES))
+
     def _on_backend_changed(self, _index: int = 0) -> None:
         self._ref_group.setVisible(self._current_backend_supports_ip_adapter())
+        self._guidance_group.setVisible(self._current_backend_supports_guidance_scale())
         self._update_title()
 
     def _build_progress_page(self) -> QWidget:
@@ -1446,11 +1525,20 @@ class AiImageGenDialog(QDialog):
         scale = self._slider_ipa.value() / 100.0 if hasattr(self, "_slider_ipa") else 0.5
         base = self._base_image_path or None
         strength = self._slider_strength.value() / 100.0 if hasattr(self, "_slider_strength") else 0.6
+        extra_kwargs = {}
+        if entry.get("supports_guidance_scale"):
+            if self._chk_vary_guidance.isChecked():
+                # Spread a fixed comparison range across the n generated images
+                # so the results picker lets the user choose their favourite.
+                extra_kwargs["guidance_scales"] = _GUIDANCE_SCALE_COMPARISON_VALUES
+            else:
+                extra_kwargs["guidance_scale"] = self._slider_guidance.value() / 10.0
         worker = entry["worker_factory"](
             prompts, n, self._output_dir,
             ref_image_path=ref, ip_adapter_scale=scale,
             base_image_path=base, img2img_strength=strength,
             base_image_map=base_image_map,
+            **extra_kwargs,
         )
         worker.progress.connect(self._lbl_progress.setText)
         worker.finished.connect(self._on_worker_done)

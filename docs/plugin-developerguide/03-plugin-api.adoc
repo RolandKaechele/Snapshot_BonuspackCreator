@@ -69,6 +69,7 @@ def register(app):
         worker_factory=make_worker,
         is_available=lambda: True,       # hide until e.g. model files exist
         supports_ip_adapter=False,       # show the character-reference group?
+        supports_guidance_scale=False,   # show the Guidance Scale (CFG) group?
         get_device_info=lambda: "",      # optional string for the window title
         verify_dialog_cls=None,          # optional QDialog for interactive auth
         ref_gen_dialog_cls=None,         # optional QDialog for the "Generate
@@ -81,10 +82,40 @@ with `progress(str)`, `image_ready(str, str, str)`, `finished(list)`, and
 `error(str)` signals plus an `abort()` method. Local backends may accept the
 extra keyword arguments `ref_image_path`, `ip_adapter_scale`,
 `base_image_path`, `img2img_strength`, and `base_image_map`; unused kwargs
-should be accepted and ignored (`**_ignored`).
+should be accepted and ignored (`**_ignored`). Backends with
+`supports_guidance_scale=True` may additionally accept `guidance_scale`
+(`float`) and/or `guidance_scales` (`list[float]`, cycled across the `n`
+generated images per prompt — used by the dialog's "vary guidance scale
+across generated images" comparison checkbox).
 
 When no backend plugin registers itself as available, the *AI Generate…*
 buttons in Photos, Love Lens, and City Events are hidden automatically.
-See `plugins/perchance_diffusion` (online, no dependencies) and
+See `plugins/perchance_diffusion` (online, no dependencies),
 `plugins/anythingxl_diffusion` (local Stable Diffusion XL, requires model
-files + `diffusers`) for full reference implementations.
+files + `diffusers`), and `plugins/anima_diffusion` (local Cosmos-Predict2/
+Anima DiT model, `supports_guidance_scale=True`) for full reference
+implementations.
+
+=== LoRA Add-on Plugins
+
+Plugins that provide a LoRA weights file for an existing diffusion backend
+(rather than a full backend of their own) register against that backend's
+key via `register_lora_addon()`:
+
+[source,python]
+----
+from modules import ai_image_gen as aig
+
+def register(app):
+    aig.register_lora_addon(
+        "anylora",                        # base backend key to attach to
+        "/path/to/my_lora.safetensors",
+        "My LoRA (label)",
+    )
+----
+
+The base backend's `worker_factory` is responsible for reading
+`aig.get_lora_addons(backend_key)` (a list of `{"path", "label"}` dicts) and
+loading them via `pipe.load_lora_weights(path)` when present. See
+`plugins/moredetails_lora` (attached to `plugins/anylora_diffusion`) for a
+reference implementation.
