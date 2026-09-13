@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (  # type: ignore
     QComboBox, QTabWidget, QSplitter, QPlainTextEdit, QLineEdit,
     QScrollArea, QTableWidget, QTableWidgetItem, QHeaderView,
     QAbstractItemView, QStyledItemDelegate, QStackedWidget,
-    QSpinBox, QGroupBox, QCheckBox, QFrame,
+    QSpinBox, QGroupBox, QCheckBox, QFrame, QInputDialog, QMenu,
 )
 from PyQt6.QtGui import QPalette, QIcon, QPixmap, QPainter, QFont  # type: ignore
 from PyQt6.QtCore import Qt  # type: ignore
@@ -25,6 +25,8 @@ from modules.image_utils import (
 from modules.tooltips import set_tip, tip
 from modules.video_widget import VideoPreviewWidget, AudioPreviewWidget, is_video_file
 from modules.ai_image_gen import open_ai_generate_dialog, open_ai_video_gen_dialog
+from modules import city_events_templates
+from ui.dialogs import show_error
 from ui.image_viewer import attach_viewer
 
 if TYPE_CHECKING:
@@ -579,6 +581,17 @@ class EventWidget(QWidget):
 
         return page
 
+    def _reload_scene_templates(self) -> None:
+        """(Re)populate the scene-template combo from city_events_templates.json."""
+        self._cmb_scene_template.clear()
+        for template in city_events_templates.load_templates():
+            label = template.get("name", "Untitled")
+            description = template.get("description", "")
+            self._cmb_scene_template.addItem(label, template)
+            if description:
+                self._cmb_scene_template.setItemData(
+                    self._cmb_scene_template.count() - 1, description, Qt.ItemDataRole.ToolTipRole)
+
     def _build_dlg_tab(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
@@ -588,8 +601,13 @@ class EventWidget(QWidget):
         # Scene-list toolbar
         scene_toolbar = QHBoxLayout()
         scene_toolbar.setSpacing(4)
-        btn_scene_add = QPushButton("Add Scene…")
-        btn_scene_add.setFixedWidth(90)
+        btn_scene_new = QPushButton("New Scene…")
+        btn_scene_new.setMinimumWidth(90)
+        btn_scene_new.setToolTip(
+            "Create a blank scene by name — no file needed, it's written out on save/export.")
+        btn_scene_add = QPushButton("Import Scene…")
+        btn_scene_add.setMinimumWidth(100)
+        btn_scene_add.setToolTip("Import one or more existing dialog JSON files from disk.")
         btn_scene_rem = QPushButton("Remove")
         btn_scene_rem.setFixedWidth(70)
         self._btn_graph_toggle = QPushButton("Graph View")
@@ -602,6 +620,7 @@ class EventWidget(QWidget):
         self._btn_test = btn_test
         btn_test.setToolTip(
             "Open interactive playback window — step through dialog nodes")
+        scene_toolbar.addWidget(btn_scene_new)
         scene_toolbar.addWidget(btn_scene_add)
         scene_toolbar.addWidget(btn_scene_rem)
         scene_toolbar.addSpacing(12)
@@ -610,12 +629,27 @@ class EventWidget(QWidget):
         scene_toolbar.addStretch()
         layout.addLayout(scene_toolbar)
 
+        # Template row — pick a bundled starter scene instead of importing a file
+        template_toolbar = QHBoxLayout()
+        template_toolbar.setSpacing(4)
+        template_toolbar.addWidget(QLabel("Template:"))
+        self._cmb_scene_template = QComboBox()
+        self._cmb_scene_template.setMinimumWidth(180)
+        self._reload_scene_templates()
+        template_toolbar.addWidget(self._cmb_scene_template, 1)
+        btn_scene_from_template = QPushButton("Add From Template")
+        btn_scene_from_template.setToolTip(
+            "Create a new dialog scene pre-filled from the selected starter template.")
+        template_toolbar.addWidget(btn_scene_from_template)
+        layout.addLayout(template_toolbar)
+
         outer_split = QSplitter(Qt.Orientation.Horizontal)
         outer_split.setChildrenCollapsible(False)
         layout.addWidget(outer_split, 1)
 
         # Left: dialog scene list
         self._dlg_list = QListWidget()
+        self._dlg_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         outer_split.addWidget(self._dlg_list)
 
         # Middle: QStackedWidget — index 0 = node list  (graph lives in its own window)
@@ -962,6 +996,75 @@ class EventWidget(QWidget):
             self._current_dlg_row = -1
             self._node_list.clear()
 
+        def _on_scene_rename() -> None:
+            row = self._dlg_list.currentRow()
+            if row < 0:
+                return
+            dlgs = [e for e in self._pm.data.get("events", []) if e.get("type") == "dialog"]
+            if row >= len(dlgs):
+                return
+            current_name = dlgs[row].get("name", "")
+            name, ok = QInputDialog.getText(
+                page, "Rename Scene", "New name for the scene:", text=current_name)
+            if not ok or not name.strip() or name.strip() == current_name:
+                return
+            dlgs[row]["name"] = name.strip()
+            self._dlg_list.item(row).setText(name.strip())
+
+        def _on_scene_save_as_template() -> None:
+            row = self._dlg_list.currentRow()
+            if row < 0:
+                return
+            dlgs = [e for e in self._pm.data.get("events", []) if e.get("type") == "dialog"]
+            if row >= len(dlgs):
+                return
+            ev = dlgs[row]
+            try:
+                dialog = json.loads(ev.get("content", "{}"))
+            except json.JSONDecodeError:
+                show_error(self, "Save As Template", "This scene's JSON is invalid and cannot be saved as a template.",
+                           tag="EventWidget._on_scene_save_as_template")
+                return
+            name, ok = QInputDialog.getText(
+                page, "Save As Template", "Template name:", text=ev.get("name", "Scene"))
+            if not ok or not name.strip():
+                return
+            description, ok = QInputDialog.getText(page, "Save As Template", "Template description (optional):")
+            if not ok:
+                return
+            city_events_templates.add_template(name.strip(), dialog, description.strip())
+            self._reload_scene_templates()
+
+        def _on_scene_context_menu(pos) -> None:
+            item = self._dlg_list.itemAt(pos)
+            if item is not None:
+                self._dlg_list.setCurrentItem(item)
+            menu = QMenu(self._dlg_list)
+            act_new = menu.addAction("New Scene…")
+            act_import = menu.addAction("Import Scene…")
+            act_rename = act_delete = act_save_template = None
+            if self._dlg_list.count():
+                menu.addSeparator()
+                act_rename = menu.addAction("Rename…")
+                act_delete = menu.addAction("Delete")
+                act_save_template = menu.addAction("Save As Template…")
+                act_rename.setEnabled(item is not None)
+                act_delete.setEnabled(item is not None)
+                act_save_template.setEnabled(item is not None)
+            chosen = menu.exec(self._dlg_list.mapToGlobal(pos))
+            if chosen is act_new:
+                _on_scene_new()
+            elif chosen is act_import:
+                _on_scene_add()
+            elif chosen is act_rename:
+                _on_scene_rename()
+            elif chosen is act_delete:
+                _on_scene_rem()
+            elif chosen is act_save_template:
+                _on_scene_save_as_template()
+
+        self._dlg_list.customContextMenuRequested.connect(_on_scene_context_menu)
+
         def _on_node_add() -> None:
             if self._current_dlg_row < 0:
                 return
@@ -1000,8 +1103,49 @@ class EventWidget(QWidget):
             self._serialize_dialog()
             self._rebuild_node_list(keep_row=target)
 
+        def _on_scene_from_template() -> None:
+            idx = self._cmb_scene_template.currentIndex()
+            template = self._cmb_scene_template.itemData(idx)
+            if not template:
+                return
+            default_name = template.get("name", "Scene")
+            name, ok = QInputDialog.getText(
+                page, "Scene Name", "Name for the new scene:", text=default_name)
+            if not ok or not name.strip():
+                return
+            events: list = self._pm.data.setdefault("events", [])
+            events.append({
+                "type": "dialog",
+                "source": "",
+                "name": name.strip(),
+                "content": json.dumps(template.get("dialog", {}), ensure_ascii=False, indent=2),
+            })
+            self._dlg_list.addItem(name.strip())
+            self._dlg_list.setCurrentRow(self._dlg_list.count() - 1)
+
+        def _on_scene_new() -> None:
+            name, ok = QInputDialog.getText(page, "Scene Name", "Name for the new scene:")
+            if not ok or not name.strip():
+                return
+            blank_dialog = {
+                "dID": 0, "startPoint": 0, "loadTag": "",
+                "previewPanning": False, "showSettings": True,
+                "npcDiags": 0, "playerDiags": 0, "actionNodes": 0,
+            }
+            events: list = self._pm.data.setdefault("events", [])
+            events.append({
+                "type": "dialog",
+                "source": "",
+                "name": name.strip(),
+                "content": json.dumps(blank_dialog, ensure_ascii=False, indent=2),
+            })
+            self._dlg_list.addItem(name.strip())
+            self._dlg_list.setCurrentRow(self._dlg_list.count() - 1)
+
+        btn_scene_new.clicked.connect(_on_scene_new)
         btn_scene_add.clicked.connect(_on_scene_add)
         btn_scene_rem.clicked.connect(_on_scene_rem)
+        btn_scene_from_template.clicked.connect(_on_scene_from_template)
         btn_nd_add.clicked.connect(_on_node_add)
         btn_nd_rem.clicked.connect(_on_node_rem)
         btn_nd_up.clicked.connect(lambda: _on_node_move(-1))

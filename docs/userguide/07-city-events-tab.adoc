@@ -24,9 +24,38 @@ The Dialogs sub-tab has three vertical panels separated by resizable splitters.
 
 ==== Scene List (left panel)
 
-Click *Add Scene…* to import one or more `.json` dialog files.
-Each file becomes a named dialog scene in the list.
+Click *New Scene…* to create a blank scene by name — no file is needed; its content is written out automatically on save/export.
+Click *Import Scene…* to import one or more existing `.json` dialog files from disk (each file becomes a named dialog scene in the list).
 Click *Remove* to delete the selected scene.
+
+Below the toolbar, the *Template* dropdown lists starter scenes bundled in `city_events_templates.json`.
+Pick one and click *Add From Template* to create a new scene pre-filled with that template's nodes; you'll be prompted for a name for the new scene.
+
+Right-click a scene in the list (or empty space below the list) for a context menu with:
+
+[cols="1,4"]
+|===
+| Action | Effect
+
+| *New Scene…*
+| Same as the *New Scene…* button.
+
+| *Import Scene…*
+| Same as the *Import Scene…* button.
+
+| *Rename…*
+| Renames the selected scene.
+
+| *Delete*
+| Deletes the selected scene (same as the *Remove* button).
+
+| *Save As Template…*
+| Saves the selected scene's current dialog content as a new entry in `city_events_templates.json`, prompting for a template name and optional description. The new template immediately appears in the *Template* dropdown.
+|===
+
+*Rename…*, *Delete*, and *Save As Template…* require a scene to be selected first, and are omitted entirely when the scene list is empty.
+
+TIP: `city_events_templates.json` lives beside `main.py` in a source checkout, or beside the executable in a frozen build. It holds a plain list of templates, so it can be hand-edited or shared between installs.
 
 ==== Node List (middle panel)
 

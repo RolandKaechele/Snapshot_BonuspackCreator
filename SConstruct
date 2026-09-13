@@ -203,6 +203,10 @@ def _run_pyinstaller(target, source, env):
     if os.path.isfile(prompts_path):
         cmd += ["--add-data", os.path.abspath(prompts_path) + os.pathsep + "."]
 
+    city_events_templates_path = os.path.join("src", "city_events_templates.json")
+    if os.path.isfile(city_events_templates_path):
+        cmd += ["--add-data", os.path.abspath(city_events_templates_path) + os.pathsep + "."]
+
     cmd.append(str(source[0]))
 
     print(f"Running PyInstaller [{variant}] ...")

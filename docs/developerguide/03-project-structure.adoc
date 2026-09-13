@@ -37,6 +37,7 @@ snapshot_pack_creator_V1_9/
 │       ├── picture_widget.py
 │       ├── overwrite_texts.py
 │       ├── event_widget.py
+│       ├── city_events_templates.py  ← City Events scene-template loader/saver (NEW)
 │       ├── dialog_graph.py      ← visual node-graph editor (NEW)
 │       ├── dialog_player.py     ← step-through dialog playback (NEW)
 │       ├── video_widget.py      ← inline MP4 video preview widget (NEW)
