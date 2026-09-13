@@ -76,6 +76,7 @@ class MainWindow(QMainWindow):
 
         self._pack_info_widget.game_changed.connect(self._on_game_changed)
         self.setCentralWidget(self._tabs)
+        self._on_game_changed(self._pack_manager.get("game", "snapshot"))
 
     # ── File menu handlers ──────────────────────────────────────────────────
 
@@ -186,8 +187,9 @@ class MainWindow(QMainWindow):
 
     def _on_game_changed(self, game: str) -> None:
         snapshot_only = game == "snapshot"
-        for idx in (3, 5):  # City Events, Love Lens (Cutscenes index 4 stays hidden)
-            self._tabs.setTabVisible(idx, snapshot_only)
+        pack_type = self._pack_manager.get("pack_type", "photos")
+        self._tabs.setTabVisible(3, snapshot_only and pack_type == "events")    # City Events
+        self._tabs.setTabVisible(5, snapshot_only and pack_type == "lovelens")  # Love Lens
 
     def _refresh_all(self) -> None:
         self._pack_info_widget.refresh()

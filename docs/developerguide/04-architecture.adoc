@@ -17,7 +17,7 @@ Modules read and write it via `PackManager.get()` / `PackManager.set()` / direct
 === Game-Aware Tab Visibility
 
 `PackInfoWidget` emits `game_changed = pyqtSignal(str)` whenever the game combo changes.
-`MainWindow._on_game_changed(game)` calls `self._tabs.setTabVisible(idx, ...)` to hide the Snapshot!-only tabs (City Events index 3, Love Lens index 5) when `game == "lewdshores"`.
+`MainWindow._on_game_changed(game)` calls `self._tabs.setTabVisible(idx, ...)` to hide the Snapshot!-only tabs (City Events index 3, Love Lens index 5) when `game == "lewdshores"`. City Events is additionally hidden whenever `pack_type != "events"`, and Love Lens whenever `pack_type != "lovelens"`, since the game only reads the corresponding ini sections for the matching pack type.
 Cutscenes (index 4) is unconditionally hidden at startup via `setTabVisible(4, False)` until the game defines a cutscene pack format.
 On import, `gameID` is read from `[Mod]` / `[Pack]` and stored as `game`; `_refresh_all()` re-applies visibility automatically.
 

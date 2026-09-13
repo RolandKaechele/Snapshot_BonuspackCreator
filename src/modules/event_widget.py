@@ -26,7 +26,7 @@ from modules.tooltips import set_tip, tip
 from modules.video_widget import VideoPreviewWidget, AudioPreviewWidget, is_video_file
 from modules.ai_image_gen import open_ai_generate_dialog, open_ai_video_gen_dialog
 from modules import city_events_templates
-from ui.dialogs import show_error
+from ui.dialogs import show_error, show_info
 from ui.image_viewer import attach_viewer
 
 if TYPE_CHECKING:
@@ -53,6 +53,13 @@ _KNOWN_CMDS = [
 
 # Commands whose Argument is an image/video asset name
 _IMAGE_CMDS = {"showImage", "mod_showImage", "showEventPhoto", "mod_overlayImage3", "mod_addEventSellablePhoto"}
+
+# Split of _IMAGE_CMDS by which slot they populate at runtime (see dialog_player._show_node)
+_BG_IMAGE_CMDS = {"showImage", "mod_showImage", "showEventPhoto", "mod_addEventSellablePhoto"}
+_OV_IMAGE_CMDS = {"mod_overlayImage3"}
+
+# Extensions checked when locating an image/video asset referenced by an imported scene
+_ASSET_EXTS = (".png", ".jpg", ".jpeg", ".dat", ".jpa", ".pna", ".bytes", ".byte")
 
 # Commands whose Argument is a sound asset name
 _SOUND_CMDS = {"playSound", "playSoundDelayed", "stopLoopedSound"}
@@ -300,6 +307,39 @@ def _remap_refs(nodes: list, remap: dict) -> None:
                 node[field] = remap[ref]
 
 
+def _find_asset_near(stem: str, json_path: str) -> str:
+    """Look for an image/video file named *stem* beside an imported scene JSON file."""
+    if not stem or not json_path:
+        return ""
+    base_dir = os.path.dirname(json_path)
+    for d in (base_dir, os.path.join(base_dir, "Data"), os.path.dirname(base_dir)):
+        for ext in _ASSET_EXTS:
+            p = os.path.join(d, stem + ext)
+            if os.path.isfile(p):
+                return p
+    return ""
+
+
+def _collect_scene_image_refs(content: str) -> tuple[set, set]:
+    """Return (background_stems, overlay_stems) referenced by a dialog scene's node commands."""
+    bg_stems: set = set()
+    ov_stems: set = set()
+    try:
+        data = json.loads(content) if content.strip() else {}
+    except json.JSONDecodeError:
+        return bg_stems, ov_stems
+    for node in _extract_nodes(data):
+        for v in node.get("vars", []):
+            key, val = v.get("key", ""), v.get("val", "")
+            if not val:
+                continue
+            if key in _BG_IMAGE_CMDS:
+                bg_stems.add(val)
+            elif key in _OV_IMAGE_CMDS:
+                ov_stems.add(val)
+    return bg_stems, ov_stems
+
+
 def _node_label(idx: int, node: dict) -> str:
     tag  = node.get("tag", "")
     text = node.get("text", "")
@@ -507,12 +547,13 @@ class EventWidget(QWidget):
             events: list = self._pm.data.setdefault("events", [])
             for path in paths:
                 if not any(e.get("type") == ev_type and e.get("source") == path for e in events):
+                    name = os.path.splitext(os.path.basename(path))[0]
                     events.append({
                         "type": ev_type,
                         "source": path,
-                        "name": os.path.splitext(os.path.basename(path))[0],
+                        "name": name,
                     })
-                    item = QListWidgetItem(os.path.basename(path))
+                    item = QListWidgetItem(name)
                     item.setData(Qt.ItemDataRole.UserRole, path)
                     ev_list.addItem(item)
             if ev_list.count():
@@ -552,12 +593,13 @@ class EventWidget(QWidget):
                 events: list = self._pm.data.setdefault("events", [])
                 for path in type_map:
                     if not any(e.get("type") == ev_type and e.get("source") == path for e in events):
+                        name = os.path.splitext(os.path.basename(path))[0]
                         events.append({
                             "type": ev_type,
                             "source": path,
-                            "name": os.path.splitext(os.path.basename(path))[0],
+                            "name": name,
                         })
-                        item = QListWidgetItem(os.path.basename(path))
+                        item = QListWidgetItem(name)
                         item.setData(Qt.ItemDataRole.UserRole, path)
                         ev_list.addItem(item)
                 if ev_list.count():
@@ -965,6 +1007,8 @@ class EventWidget(QWidget):
             paths, _ = QFileDialog.getOpenFileNames(
                 page, "Select Dialog JSON Files", "", "JSON Files (*.json)")
             events: list = self._pm.data.setdefault("events", [])
+            added_assets = 0
+            missing_assets: list = []
             for path in paths:
                 if any(e.get("type") == "dialog" and e.get("source") == path
                        for e in events):
@@ -973,15 +1017,42 @@ class EventWidget(QWidget):
                     content = open(path, encoding="utf-8").read()
                 except OSError:
                     content = ""
+                name = os.path.splitext(os.path.basename(path))[0]
                 events.append({
                     "type": "dialog",
                     "source": path,
-                    "name": os.path.splitext(os.path.basename(path))[0],
+                    "name": name,
                     "content": content,
                 })
-                self._dlg_list.addItem(os.path.basename(path))
+                self._dlg_list.addItem(name)
+
+                # Auto-register any background/overlay images the scene's own
+                # nodes reference, so the export doesn't silently miss them.
+                bg_stems, ov_stems = _collect_scene_image_refs(content)
+                for stem, ev_type, ev_list in (
+                    *((s, "background", self._bg_list) for s in bg_stems),
+                    *((s, "overlay", self._ov_list) for s in ov_stems),
+                ):
+                    if any(e.get("type") == ev_type and e.get("name") == stem for e in events):
+                        continue
+                    asset_path = _find_asset_near(stem, path)
+                    if not asset_path:
+                        missing_assets.append(stem)
+                        continue
+                    events.append({"type": ev_type, "source": asset_path, "name": stem})
+                    item = QListWidgetItem(stem)
+                    item.setData(Qt.ItemDataRole.UserRole, asset_path)
+                    ev_list.addItem(item)
+                    added_assets += 1
             if self._dlg_list.count():
                 self._dlg_list.setCurrentRow(self._dlg_list.count() - 1)
+            if added_assets or missing_assets:
+                msg = []
+                if added_assets:
+                    msg.append(f"Added {added_assets} background/overlay file(s) referenced by the imported scene(s).")
+                if missing_assets:
+                    msg.append("Could not locate: " + ", ".join(sorted(set(missing_assets))))
+                show_info(page, "Import Scene", "\n".join(msg), tag="EventWidget._on_scene_add")
 
         def _on_scene_rem() -> None:
             row = self._dlg_list.currentRow()

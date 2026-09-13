@@ -132,6 +132,14 @@ class ImportExportManager:
 
         # Advisory checks: rare-photo cap (Snapshot) and Love Lens slot completeness.
         extra_warnings: list[str] = []
+        if pm.get("pack_type", "photos") != "events" and pm.data.get("events"):
+            extra_warnings.append(
+                "This pack has City Events content (backgrounds, overlays, or dialog scenes) "
+                "but Pack Type is set to 'Photos' on the Pack Info tab.\n"
+                "The game only reads the [Events] section for packs with Pack Type = Events, "
+                "so this content will be copied into Data\\ but will NOT be active in-game.\n"
+                "Set Pack Type to 'Events' on the Pack Info tab if you want it to work."
+            )
         if pm.get("game", "snapshot") == "snapshot" and pm.get("pack_type", "photos") == "photos":
             from modules.picture_widget import get_rare_photo_warning
             rare_msg = get_rare_photo_warning(pm.data)

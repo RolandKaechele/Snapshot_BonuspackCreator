@@ -1,6 +1,6 @@
 == Love Lens Tab
 
-NOTE: This tab is only visible when the game is set to *Snapshot!* on the Pack Info tab.
+NOTE: This tab is only visible when the game is set to *Snapshot!* on the Pack Info tab, and *Pack Type* is set to *Love Lens*.
 
 The tab is divided into four sub-tabs.
 

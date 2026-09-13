@@ -34,9 +34,10 @@ def _ms_to_str(ms: int) -> str:
 class VideoPreviewWidget(QWidget):
     """Inline video player embeddable as a preview panel."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, loop: bool = False) -> None:
         super().__init__(parent)
         self._path: str = ""
+        self._loop = loop
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -90,6 +91,7 @@ class VideoPreviewWidget(QWidget):
         self._player.durationChanged.connect(self._on_duration_changed)
         self._player.positionChanged.connect(self._on_position_changed)
         self._player.errorOccurred.connect(self._on_error)
+        self._player.mediaStatusChanged.connect(self._on_media_status_changed)
 
     # ── Public API ──────────────────────────────────────────────────────────
 
@@ -152,6 +154,11 @@ class VideoPreviewWidget(QWidget):
 
     def _on_error(self, error, msg: str) -> None:
         _dlog("VideoPreviewWidget._on_error", f"{error}: {msg}")
+
+    def _on_media_status_changed(self, status) -> None:
+        if self._loop and status == QMediaPlayer.MediaStatus.EndOfMedia:
+            self._player.setPosition(0)
+            self._player.play()
 
 
 class AudioPreviewWidget(QWidget):

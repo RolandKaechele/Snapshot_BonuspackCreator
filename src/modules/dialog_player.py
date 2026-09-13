@@ -3,8 +3,8 @@
 import os
 
 from PyQt6.QtCore import Qt, QRect, QUrl  # type: ignore
-from PyQt6.QtGui import QFont, QPixmap, QPainter, QColor  # type: ignore
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput  # type: ignore
+from PyQt6.QtGui import QFont, QPixmap, QPainter, QColor, QImage  # type: ignore
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink  # type: ignore
 from PyQt6.QtWidgets import (  # type: ignore
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QGroupBox, QWidget, QSizePolicy,
@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (  # type: ignore
 
 from app_debug import dlog as _dlog
 from modules.image_utils import resolve_game_asset, resolve_audio_asset, load_pixmap
+from modules.video_widget import is_video_file
 
 # Forward-flow port colours (same as graph)
 _COLOR_NEXT   = "#5599ff"
@@ -92,6 +93,29 @@ class _CompositePanel(QWidget):
         self._dlg_tag   = ""
         self._dlg_text  = ""
         self._dlg_bg    = "#3a3a3a"
+        # Overlay videos (mod_overlayImage3) are decoded to frames and painted
+        # into this same canvas — a real QVideoWidget uses a native surface
+        # that always renders above sibling widgets (e.g. player-choice
+        # buttons) regardless of raise()/lower(), so it can't be used here.
+        self._ov_video_frame: QImage | None = None
+        self._ov_player = QMediaPlayer()
+        self._ov_audio  = QAudioOutput()
+        self._ov_player.setAudioOutput(self._ov_audio)
+        self._ov_sink   = QVideoSink()
+        self._ov_player.setVideoSink(self._ov_sink)
+        self._ov_sink.videoFrameChanged.connect(self._on_ov_frame)
+        self._ov_player.mediaStatusChanged.connect(self._on_ov_status_changed)
+
+    def _on_ov_frame(self, frame) -> None:
+        img = frame.toImage()
+        if not img.isNull():
+            self._ov_video_frame = img
+            self.update()
+
+    def _on_ov_status_changed(self, status) -> None:
+        if status == QMediaPlayer.MediaStatus.EndOfMedia:
+            self._ov_player.setPosition(0)
+            self._ov_player.play()
 
     def set_background(self, path: str, stem: str = "") -> None:
         pix = load_pixmap(path) if (path and os.path.isfile(path)) else QPixmap()
@@ -100,6 +124,16 @@ class _CompositePanel(QWidget):
         self.update()
 
     def set_overlay(self, path: str, stem: str = "") -> None:
+        if path and os.path.isfile(path) and is_video_file(path):
+            self._ov_pix = None
+            self._ov_label = stem
+            self._ov_player.setSource(QUrl.fromLocalFile(path))
+            self._ov_player.play()
+            self.update()
+            return
+        self._ov_player.stop()
+        self._ov_player.setSource(QUrl())
+        self._ov_video_frame = None
         pix = load_pixmap(path) if (path and os.path.isfile(path)) else QPixmap()
         self._ov_pix = pix if not pix.isNull() else None
         self._ov_label = stem
@@ -115,6 +149,9 @@ class _CompositePanel(QWidget):
         self._bg_pix = self._ov_pix = None
         self._bg_label = self._ov_label = ""
         self._dlg_tag = self._dlg_text = ""
+        self._ov_player.stop()
+        self._ov_player.setSource(QUrl())
+        self._ov_video_frame = None
         self.update()
 
     def paintEvent(self, event) -> None:
@@ -138,9 +175,10 @@ class _CompositePanel(QWidget):
             p.drawText(rect, Qt.AlignmentFlag.AlignCenter,
                        f"bg: {self._bg_label}\n(not found)")
 
-        # Overlay image
-        if self._ov_pix and not self._ov_pix.isNull():
-            scaled = self._ov_pix.scaled(
+        # Overlay video frame (takes priority when playing) or static image
+        ov_pix = QPixmap.fromImage(self._ov_video_frame) if self._ov_video_frame is not None else self._ov_pix
+        if ov_pix and not ov_pix.isNull():
+            scaled = ov_pix.scaled(
                 rect.size(),
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
@@ -537,6 +575,7 @@ class DialogPlayerWindow(QDialog):
             self._choices_layout.addWidget(btn)
 
         self._frm_choices.show()
+        self._frm_choices.raise_()
 
     def _choose(self, dest: int) -> None:
         """Follow a player dialog choice to *dest* nd_ array index."""

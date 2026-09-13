@@ -1,6 +1,6 @@
 == City Events Tab
 
-NOTE: This tab is only visible when the game is set to *Snapshot!* on the Pack Info tab.
+NOTE: This tab is only visible when the game is set to *Snapshot!* on the Pack Info tab, and *Pack Type* is set to *Events*. The game only reads city-event data from packs declared as event packs; content added while Pack Type is *Photos* would be copied to disk but never loaded in-game.
 
 The tab is divided into three sub-tabs: *Backgrounds*, *Overlays*, and *Dialogs*.
 At the top of the tab, choose the *Event Type* — `normal` (default) or `explosion`.
@@ -26,6 +26,7 @@ The Dialogs sub-tab has three vertical panels separated by resizable splitters.
 
 Click *New Scene…* to create a blank scene by name — no file is needed; its content is written out automatically on save/export.
 Click *Import Scene…* to import one or more existing `.json` dialog files from disk (each file becomes a named dialog scene in the list).
+Any background/overlay image or video referenced by the imported scene's node commands (`showImage`, `mod_showImage`, `showEventPhoto`, `mod_addEventSellablePhoto`, `mod_overlayImage3`) is automatically located beside the source JSON file (same folder, its `Data\` subfolder, or one level up) and added to the Backgrounds/Overlays tabs. A summary dialog reports anything that couldn't be found.
 Click *Remove* to delete the selected scene.
 
 Below the toolbar, the *Template* dropdown lists starter scenes bundled in `city_events_templates.json`.

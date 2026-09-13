@@ -534,7 +534,8 @@ class PictureWidget(QWidget):
         photos: list = self._pm.data.get("photos", [])
         self._list.clear()
         for photo in photos:
-            label = os.path.basename(photo.get("source") or photo.get("name", ""))
+            label = os.path.splitext(
+                os.path.basename(photo.get("source") or photo.get("name", "")))[0]
             item = QListWidgetItem(label)
             pix = load_pixmap(photo.get("source")) if photo.get("source") else QPixmap()
             if not pix.isNull():

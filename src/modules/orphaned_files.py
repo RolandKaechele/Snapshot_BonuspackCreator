@@ -19,7 +19,7 @@ from PyQt6.QtGui import QIcon, QPixmap, QColor  # type: ignore
 from PyQt6.QtCore import Qt, QSize  # type: ignore
 
 from app_debug import dlog as _dlog
-from modules.image_utils import ASSET_EXTS, load_pixmap
+from modules.image_utils import ASSET_EXTS, load_pixmap, resolve_asset, resolve_audio_asset, resolve_game_asset
 from ui.image_viewer import attach_viewer
 
 if TYPE_CHECKING:
@@ -106,6 +106,44 @@ def _collect_broken(data: dict) -> list[str]:
         src = event.get("source", "")
         _check(src, event.get("name", "") or os.path.basename(src))
 
+    return broken
+
+
+def _collect_broken_scene_assets(data: dict, folder: str) -> list[str]:
+    """Return labels for mod_overlayImage3/audio-command references in city-event
+    dialog scenes that resolve to neither a pack asset nor a builtin game asset."""
+    if data.get("pack_type") != "events":
+        return []
+    from modules.event_widget import _extract_nodes, _OV_IMAGE_CMDS, _SOUND_CMDS
+
+    game = data.get("game", "snapshot")
+    broken: list[str] = []
+    for event in data.get("events", []):
+        if event.get("type") != "dialog":
+            continue
+        scene_name = event.get("name", "?")
+        content = event.get("content", "")
+        if not content.strip():
+            continue
+        try:
+            scene_data = json.loads(content)
+        except json.JSONDecodeError:
+            continue
+        for node in _extract_nodes(scene_data):
+            for v in node.get("vars", []):
+                key, val = v.get("key", ""), v.get("val", "")
+                if not val:
+                    continue
+                if key in _OV_IMAGE_CMDS:
+                    in_pack = os.path.isfile(resolve_asset(val, folder)) if folder else False
+                    in_game = bool(resolve_game_asset(val, "Texture2D", game))
+                    if not in_pack and not in_game:
+                        broken.append(f"{val} (overlay, scene '{scene_name}')")
+                elif key in _SOUND_CMDS:
+                    in_pack = bool(resolve_audio_asset(val, folder)) if folder else False
+                    in_game = bool(resolve_game_asset(val, "AudioClip", game))
+                    if not in_pack and not in_game:
+                        broken.append(f"{val} (audio, scene '{scene_name}')")
     return broken
 
 
@@ -242,7 +280,8 @@ class OrphanedFilesWidget(QWidget):
 
         # Broken references with yellow icon
         yellow = _yellow_icon()
-        for label in sorted(set(_collect_broken(data))):
+        broken_labels = _collect_broken(data) + _collect_broken_scene_assets(data, folder)
+        for label in sorted(set(broken_labels)):
             item = QListWidgetItem(yellow, label)
             self._list_broken.addItem(item)
 

@@ -28,6 +28,8 @@ On export, all orphaned files are automatically copied into the exported `Data/`
 A *broken* reference is a filename that appears in the pack ini or events data but whose corresponding file does not exist on disk.
 These entries are shown with a yellow icon.
 
+For *Events*-type packs, this also includes `mod_overlayImage3` and audio commands (`playSound`, `playSoundDelayed`, `stopLoopedSound`) referenced inside dialog scene nodes: each referenced name is checked against the pack's own `Data/` assets and against the game's builtin assets (`src/assets/Texture2D/<game>/`, `src/assets/AudioClip/<game>/`); if it's found in neither, it's listed here as `<name> (overlay, scene '<scene>')` or `<name> (audio, scene '<scene>')`.
+
 Broken references do not block export but will cause missing-asset errors in-game.
 
 === Tips
