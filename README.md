@@ -41,7 +41,7 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_installer.exe`.
 ## Features
 
 - **Pack Info tab** — pack identity (ID, title, game, type, ID range), `[Defaults]` section values, special category with colour picker and badge preview, special type/color trait aliases; Discord link for requesting a unique ID range
-- **Game-aware UI** — selecting Lewd Shores hides the Snapshot!-only tabs (City Events, Cutscenes, Love Lens) automatically; game is also detected on import from `gameID` in `pack.ini`
+- **Game-aware UI** — selecting Lewd Shores hides the Snapshot!-only tabs (City Events, Cutscenes, Love Lens) automatically; game is also detected on import from `gameID` in `pack.ini`; City Events and Love Lens are additionally hidden unless *Pack Type* on the Pack Info tab matches (`Events` / `Love Lens`), since the game only reads those ini sections for the matching pack type
 - **Tooltips throughout** — every field and button carries a tooltip explaining its purpose and valid values
 - Load / Save pack JSON project files
 - Import and export bonus content folders
@@ -57,10 +57,15 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_installer.exe`.
   - **AI Generate** — generate images via the perchance.org text-to-image API; choose a position and an optional photo type (plain, kinky, nude, …), enter a character prompt, and pick from the generated results; *(any)* photo-type iterates all modifier types automatically; generated images are tagged with position and type automatically; only user-selected images are copied to the pack folder; if Cloudflare Turnstile blocks the session a *Browser Verification* dialog opens the embed page in your real browser and guides you through a one-time DevTools Console paste step
   - Game image formats `.dat`, `.jpa`, `.pna` (renamed JPEG/PNG) are previewed and imported correctly via content sniffing; `.byte` files (renamed MP4) are detected by magic bytes and shown in an inline video player widget
 - Overwrite Texts — override displayed trait labels per image
-- City Events tab (Snapshot! only) — Backgrounds and Overlays with live image/video preview, reorder buttons, and a 3-pane Dialog editor (scene list / node list / node form); node form includes speaker dropdown (extended with `Schoolgirl`, `Teacher`, `Trio`), text, flow references (Next/Branch/Action) as dropdowns, and a command table with context-sensitive argument dropdowns and image/video browse/preview; **Dialog Graph** button opens a visual node-graph editor where each node is a draggable coloured box with colour-coded arrows for the three flow connections (Next/Branch/Action); **Dialog Player** opens a step-through playback window that renders a composite preview of background, overlay, and dialog text box; export-time validation blocks on flow-ref errors and warns on missing `endEvent`; warning dialog offers a checkbox to auto-inject `endEvent` into all affected scenes
+- City Events tab (Snapshot!, Pack Type = Events only) — Backgrounds and Overlays with live image/video preview, reorder buttons, and a 3-pane Dialog editor (scene list / node list / node form)
+  - Scene list: *New Scene…* creates a blank scene by name (no file needed); *Import Scene…* imports existing dialog JSON files from disk and auto-locates/registers any background/overlay assets the imported scene's own node commands reference; a *Template* dropdown (backed by `city_events_templates.json`, editable and shareable) plus *Add From Template* creates a scene pre-filled with starter content; right-click context menu offers New Scene…, Import Scene…, Rename…, Delete, and Save As Template… (which appends the selected scene's content back into the templates file)
+  - Node form includes speaker dropdown (extended with `Schoolgirl`, `Teacher`, `Trio`), text, flow references (Next/Branch/Action) as dropdowns, and a command table with context-sensitive argument dropdowns and image/video browse/preview
+  - **Dialog Graph** button opens a visual node-graph editor where each node is a draggable coloured box with colour-coded arrows for the three flow connections (Next/Branch/Action)
+  - **Dialog Player** ("Test…") opens a step-through playback window that renders a composite preview of background, overlay, and dialog text box; `mod_overlayImage3` video overlays are decoded frame-by-frame and painted into the same composite canvas (so they never obscure the player-choice buttons) and loop continuously while active
+  - Export-time validation blocks on flow-ref errors and warns on missing `endEvent`; warning dialog offers a checkbox to auto-inject `endEvent` into all affected scenes; a separate advisory warns if a pack has City Events content but Pack Type isn't set to Events
 - Cutscenes tab — hidden (no released pack format supports cutscenes yet; will be re-enabled when the game defines the format)
-- Love Lens tab (Snapshot! only) — tabbed Character Setup, 2D Overlay Slots, Texture Slots, and Result Photos
-- **Orphaned Files tab** — shows assets on disk that are not referenced by the pack (orphaned) and references in the ini that point to missing files (broken); image preview for orphaned files; JSON dialog file preview (pretty-printed); delete orphaned files from disk; tab is hidden automatically when there is nothing to show
+- Love Lens tab (Snapshot!, Pack Type = Love Lens only) — tabbed Character Setup, 2D Overlay Slots, Texture Slots, and Result Photos
+- **Orphaned Files tab** — shows assets on disk that are not referenced by the pack (orphaned) and references in the ini that point to missing files (broken); for Events-type packs, broken references also include `mod_overlayImage3` and audio commands (`playSound`, `playSoundDelayed`, `stopLoopedSound`) referenced inside dialog scenes that resolve to neither a pack asset nor a builtin game asset; image preview for orphaned files; JSON dialog file preview (pretty-printed); delete orphaned files from disk; tab is hidden automatically when there is nothing to show
 - Plugin system — drop Python packages into `plugins/` to extend the application
 - Statusbar with live validation feedback
 - Menubar with File / Edit / Tools / Help menus
@@ -95,6 +100,7 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_installer.exe`.
 │       ├── picture_widget.py   Photos tab
 │       ├── overwrite_texts.py  Overwrite Texts tab
 │       ├── event_widget.py     City Events tab
+│       ├── city_events_templates.py  Load/save starter dialog scenes (city_events_templates.json)
 │       ├── cutscene_widget.py  Cutscenes tab
 │       ├── love_lens.py        Love Lens tab
 │       ├── orphaned_files.py   Orphaned Files tab
@@ -109,12 +115,12 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_installer.exe`.
 
 ## Pack Types
 
-| Pack Type | Game |
-| --------- | ---- |
-| Regular Photos | Snapshot! and Lewd Shores |
-| Love Lens | Snapshot! only |
-| City Events | Snapshot! only |
-| Cutscenes | Snapshot! only |
+| Pack Type | Game | Tab visibility |
+| --------- | ---- | --------------- |
+| Regular Photos | Snapshot! and Lewd Shores | — |
+| Love Lens | Snapshot! only | Love Lens tab shown only when Pack Type = Love Lens |
+| City Events | Snapshot! only | City Events tab shown only when Pack Type = Events |
+| Cutscenes | Snapshot! only | Cutscenes tab hidden (no released pack format yet) |
 
 ## Development
 
