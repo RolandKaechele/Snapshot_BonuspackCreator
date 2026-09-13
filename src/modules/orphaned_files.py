@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import (  # type: ignore
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QPushButton, QLabel, QSplitter, QGroupBox, QPlainTextEdit, QStackedWidget,
+    QMenu, QApplication,
 )
 from PyQt6.QtGui import QIcon, QPixmap, QColor  # type: ignore
 from PyQt6.QtCore import Qt, QSize  # type: ignore
@@ -145,6 +146,9 @@ class OrphanedFilesWidget(QWidget):
             QListWidget.SelectionMode.ExtendedSelection)
         self._list_orphaned.currentItemChanged.connect(self._on_selection_changed)
         self._list_orphaned.itemDoubleClicked.connect(self._on_double_click)
+        self._list_orphaned.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._list_orphaned.customContextMenuRequested.connect(
+            lambda pos: self._show_copy_menu(self._list_orphaned, pos))
         orphan_vbox.addWidget(self._list_orphaned)
 
         btn_row = QHBoxLayout()
@@ -159,6 +163,11 @@ class OrphanedFilesWidget(QWidget):
         broken_grp = QGroupBox("Broken references (in ini, missing on disk)")
         broken_vbox = QVBoxLayout(broken_grp)
         self._list_broken = QListWidget()
+        self._list_broken.setSelectionMode(
+            QListWidget.SelectionMode.ExtendedSelection)
+        self._list_broken.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._list_broken.customContextMenuRequested.connect(
+            lambda pos: self._show_copy_menu(self._list_broken, pos))
         broken_vbox.addWidget(self._list_broken)
 
         left_layout.addWidget(orphan_grp, 3)
@@ -251,6 +260,18 @@ class OrphanedFilesWidget(QWidget):
                 _dlog("OrphanedFilesWidget.notify_referenced", f"removed {stem!r}")
 
     # ── Slots ───────────────────────────────────────────────────────────────
+
+    def _show_copy_menu(self, list_widget: QListWidget, pos) -> None:
+        items = list_widget.selectedItems()
+        if not items:
+            return
+        label = "Copy Name" if len(items) == 1 else f"Copy {len(items)} Names"
+        menu = QMenu(list_widget)
+        action = menu.addAction(label)
+        chosen = menu.exec(list_widget.mapToGlobal(pos))
+        if chosen is action:
+            names = "\n".join(item.text() for item in items)
+            QApplication.clipboard().setText(names)
 
     def _on_selection_changed(self, current: QListWidgetItem, _prev) -> None:
         self._btn_delete.setEnabled(current is not None

@@ -700,6 +700,56 @@ def has_any_backend() -> bool:
     return bool(available_backends())
 
 
+# ─── Video backend plugin registry ───────────────────────────────────────────
+#
+# Video-generation backends (e.g. plugins/wan21_i2v_video) produce a video
+# clip from a start image + prompt instead of a still image, so they use a
+# separate registry/dialog from the still-image backends above (see
+# docs/Wan21I2V_Analysis.md for why the still-image worker_factory contract
+# doesn't fit video output).
+
+VIDEO_BACKENDS: dict[str, dict] = {}
+
+
+def register_video_backend(
+    key: str,
+    label: str,
+    *,
+    worker_factory: Callable,
+    is_available: Callable[[], bool] = lambda: True,
+    get_device_info: Callable[[], str] = lambda: "",
+    default_length: int = 33,
+    default_width: int = 1280,
+    default_height: int = 720,
+) -> None:
+    """Register a video-generation backend plugin.
+
+    worker_factory(start_image_path, prompt, negative_prompt, output_dir,
+    length, width, height, **kwargs) must return a QThread with
+    progress/video_ready(str)/finished/error pyqtSignals and an abort() method.
+    """
+    VIDEO_BACKENDS[key] = {
+        "label": label,
+        "worker_factory": worker_factory,
+        "is_available": is_available,
+        "get_device_info": get_device_info,
+        "default_length": default_length,
+        "default_width": default_width,
+        "default_height": default_height,
+    }
+    _dlog("ai_image_gen.register_video_backend", f"registered {key!r} ({label})")
+
+
+def available_video_backends() -> dict[str, dict]:
+    """Return the subset of registered video backends whose is_available() is True."""
+    return {k: v for k, v in VIDEO_BACKENDS.items() if v["is_available"]()}
+
+
+def has_any_video_backend() -> bool:
+    """Return True when at least one video backend plugin is available."""
+    return bool(available_video_backends())
+
+
 # ─── LoRA add-on registry ─────────────────────────────────────────────────────
 #
 # Optional LoRA plugins (e.g. plugins/moredetails_lora) register themselves
@@ -1635,3 +1685,226 @@ def open_ai_generate_dialog(
         return
     dlg = AiImageGenDialog(parent, widget_type, on_accepted, output_dir)
     dlg.exec()
+
+
+# ─── AI Video Generator Dialog ────────────────────────────────────────────────
+
+class AiVideoGenDialog(QDialog):
+    """
+    Start image + prompt editor + generate trigger for video backend plugins
+    (e.g. plugins/wan21_i2v_video). See docs/Wan21I2V_Analysis.md.
+
+    on_accepted is called with dict[str, dict] (path -> {}) matching the
+    still-image dialog's convention, so callers can reuse the same
+    "add these paths to the events/overlays list" handler for either.
+    """
+
+    def __init__(
+        self,
+        parent: QWidget,
+        widget_type: str,
+        on_accepted: Callable[[dict], None],
+        output_dir: str | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._widget_type = widget_type
+        self._on_accepted = on_accepted
+        self._output_dir = output_dir
+        self._worker = None
+        self._start_image_path: str = ""
+        self._result_path: str = ""
+        self._backends = available_video_backends()
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        self.setWindowTitle("AI Generate Video…")
+        self.resize(560, 480)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.setSpacing(6)
+
+        self._stack = QStackedWidget()
+        root.addWidget(self._stack)
+        self._stack.addWidget(self._build_form_page())      # 0
+        self._stack.addWidget(self._build_progress_page())  # 1
+        self._stack.setCurrentIndex(0)
+
+    def _build_form_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(6)
+
+        if len(self._backends) > 1:
+            backend_group = QGroupBox("Backend")
+            backend_form = QFormLayout(backend_group)
+            self._cmb_backend = QComboBox()
+            for key, entry in self._backends.items():
+                self._cmb_backend.addItem(entry["label"], key)
+            backend_form.addRow("Source:", self._cmb_backend)
+            layout.addWidget(backend_group)
+        else:
+            self._cmb_backend = None
+
+        img_group = QGroupBox("Start Image")
+        img_layout = QHBoxLayout(img_group)
+        self._lbl_start_image = QLabel("(none selected)")
+        self._lbl_start_image.setWordWrap(True)
+        btn_browse = QPushButton("Browse…")
+        btn_browse.clicked.connect(self._on_browse_start_image)
+        img_layout.addWidget(self._lbl_start_image, 1)
+        img_layout.addWidget(btn_browse)
+        layout.addWidget(img_group)
+
+        prompt_group = QGroupBox("Prompt")
+        prompt_layout = QVBoxLayout(prompt_group)
+        self._edit_prompt = QTextEdit()
+        self._edit_prompt.setPlaceholderText(
+            "Describe the desired motion, e.g. "
+            '"smiling and turning towards the camera, smooth motion"'
+        )
+        self._edit_prompt.setFixedHeight(70)
+        prompt_layout.addWidget(self._edit_prompt)
+        layout.addWidget(prompt_group)
+
+        neg_group = QGroupBox("Negative Prompt")
+        neg_layout = QVBoxLayout(neg_group)
+        self._edit_negative = QTextEdit()
+        self._edit_negative.setPlainText("static, blurry, low quality, distorted, watermark")
+        self._edit_negative.setFixedHeight(50)
+        neg_layout.addWidget(self._edit_negative)
+        layout.addWidget(neg_group)
+
+        settings_group = QGroupBox("Settings")
+        settings_form = QFormLayout(settings_group)
+        default_entry = next(iter(self._backends.values()), {})
+        self._spin_length = QSlider(Qt.Orientation.Horizontal)
+        self._spin_length.setRange(9, 81)
+        self._spin_length.setValue(default_entry.get("default_length", 33))
+        self._lbl_length = QLabel(str(self._spin_length.value()))
+        self._spin_length.valueChanged.connect(lambda v: self._lbl_length.setText(str(v)))
+        length_row = QHBoxLayout()
+        length_row.addWidget(self._spin_length, 1)
+        length_row.addWidget(self._lbl_length)
+        settings_form.addRow("Frames:", length_row)
+        self._width = default_entry.get("default_width", 1280)
+        self._height = default_entry.get("default_height", 720)
+        settings_form.addRow("Resolution:", QLabel(f"{self._width} x {self._height}"))
+        layout.addWidget(settings_group)
+
+        layout.addStretch()
+
+        buttons = QDialogButtonBox()
+        self._btn_generate = buttons.addButton("Generate", QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        self._btn_generate.clicked.connect(self._on_generate)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        return page
+
+    def _build_progress_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.addStretch()
+        self._lbl_progress = QLabel("Generating video…")
+        self._lbl_progress.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._lbl_progress)
+        self._progress_bar = QProgressBar()
+        self._progress_bar.setRange(0, 0)
+        layout.addWidget(self._progress_bar)
+        btn_abort = QPushButton("Cancel")
+        btn_abort.clicked.connect(self._on_abort)
+        layout.addWidget(btn_abort, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addStretch()
+        return page
+
+    def _on_browse_start_image(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Start Image", "", "Images (*.png *.jpg *.jpeg)"
+        )
+        if path:
+            self._start_image_path = path
+            self._lbl_start_image.setText(path)
+
+    def _on_generate(self) -> None:
+        if not self._start_image_path:
+            show_error(self, "AI Generate Video", "Select a start image first.",
+                       tag="AiVideoGenDialog._on_generate")
+            return
+        backend_key = (
+            self._cmb_backend.currentData() if self._cmb_backend
+            else next(iter(self._backends), None)
+        )
+        entry = self._backends.get(backend_key)
+        if not entry:
+            show_error(self, "AI Generate Video", "No video backend plugin is available.",
+                       tag="AiVideoGenDialog._on_generate")
+            return
+        self._stack.setCurrentIndex(1)
+        self._lbl_progress.setText("Generating video…")
+        self._worker = entry["worker_factory"](
+            self._start_image_path,
+            self._edit_prompt.toPlainText().strip(),
+            self._edit_negative.toPlainText().strip(),
+            self._output_dir,
+            length=self._spin_length.value(),
+            width=self._width,
+            height=self._height,
+        )
+        self._worker.progress.connect(self._lbl_progress.setText)
+        self._worker.video_ready.connect(self._on_video_ready)
+        self._worker.error.connect(self._on_worker_error)
+        self._worker.start()
+
+    def _on_video_ready(self, path: str) -> None:
+        self._result_path = path
+        self._worker = None
+        _dlog("AiVideoGenDialog._on_video_ready", path)
+        self._on_accepted({path: {}})
+        self.accept()
+
+    def _on_worker_error(self, msg: str) -> None:
+        self._worker = None
+        missing = any(k in msg for k in ("No module named", "ModuleNotFoundError"))
+        hint = (
+            "\n\nMake sure the required packages for this plugin are installed\n"
+            "(run cli.bat to update the venv)."
+            if missing else ""
+        )
+        show_error(self, "AI Generate Video", f"Video generation failed:\n{msg}{hint}",
+                   tag="AiVideoGenDialog._on_worker_error")
+        self._stack.setCurrentIndex(0)
+
+    def _on_abort(self) -> None:
+        if self._worker:
+            self._worker.abort()
+            self._worker.wait(3000)
+            self._worker = None
+        self._stack.setCurrentIndex(0)
+
+    def closeEvent(self, event) -> None:
+        if self._worker:
+            self._worker.abort()
+            self._worker.wait(3000)
+        super().closeEvent(event)
+
+
+def open_ai_video_gen_dialog(
+    parent: QWidget,
+    widget_type: str,
+    on_accepted: Callable[[dict], None],
+    output_dir: str | None = None,
+) -> None:
+    """Show the AI video generation dialog for *widget_type*."""
+    if not has_any_video_backend():
+        show_error(
+            parent, "AI Generate Video",
+            "No video backend plugin is installed.\n"
+            "Drop a plugin such as wan21_i2v_video into plugins/.",
+            tag="open_ai_video_gen_dialog",
+        )
+        return
+    dlg = AiVideoGenDialog(parent, widget_type, on_accepted, output_dir)
+    dlg.exec()
+

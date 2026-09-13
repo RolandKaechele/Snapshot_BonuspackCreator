@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (  # type: ignore
 )
 
 from app_debug import dlog as _dlog
-from modules.image_utils import resolve_game_asset, resolve_audio_asset
+from modules.image_utils import resolve_game_asset, resolve_audio_asset, load_pixmap
 
 # Forward-flow port colours (same as graph)
 _COLOR_NEXT   = "#5599ff"
@@ -94,12 +94,14 @@ class _CompositePanel(QWidget):
         self._dlg_bg    = "#3a3a3a"
 
     def set_background(self, path: str, stem: str = "") -> None:
-        self._bg_pix = QPixmap(path) if (path and os.path.isfile(path)) else None
+        pix = load_pixmap(path) if (path and os.path.isfile(path)) else QPixmap()
+        self._bg_pix = pix if not pix.isNull() else None
         self._bg_label = stem
         self.update()
 
     def set_overlay(self, path: str, stem: str = "") -> None:
-        self._ov_pix = QPixmap(path) if (path and os.path.isfile(path)) else None
+        pix = load_pixmap(path) if (path and os.path.isfile(path)) else QPixmap()
+        self._ov_pix = pix if not pix.isNull() else None
         self._ov_label = stem
         self.update()
 

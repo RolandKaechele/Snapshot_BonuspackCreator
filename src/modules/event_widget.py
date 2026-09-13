@@ -24,7 +24,7 @@ from modules.image_utils import (
 )
 from modules.tooltips import set_tip, tip
 from modules.video_widget import VideoPreviewWidget, AudioPreviewWidget, is_video_file
-from modules.ai_image_gen import open_ai_generate_dialog
+from modules.ai_image_gen import open_ai_generate_dialog, open_ai_video_gen_dialog
 from ui.image_viewer import attach_viewer
 
 if TYPE_CHECKING:
@@ -355,14 +355,18 @@ class EventWidget(QWidget):
         self._current_dlg_meta: dict = {}
         self._current_dlg_row: int = -1
         self._ai_buttons: list = []
+        self._ai_video_buttons: list = []
         self._build_ui()
 
     def update_ai_availability(self) -> None:
-        """Hide AI Generate buttons when no diffusion plugin is available."""
-        from modules.ai_image_gen import has_any_backend
+        """Hide AI Generate buttons when no diffusion/video plugin is available."""
+        from modules.ai_image_gen import has_any_backend, has_any_video_backend
         visible = has_any_backend()
         for btn in self._ai_buttons:
             btn.setVisible(visible)
+        video_visible = has_any_video_backend()
+        for btn in self._ai_video_buttons:
+            btn.setVisible(video_visible)
 
     # ── Layout ────────────────────────────────────────────────────────────
 
@@ -417,6 +421,10 @@ class EventWidget(QWidget):
             toolbar.addSpacing(8)
             toolbar.addWidget(btn_ai)
             self._ai_buttons.append(btn_ai)
+            btn_ai_video = QPushButton("AI Generate Video…")
+            btn_ai_video.setFixedWidth(130)
+            toolbar.addWidget(btn_ai_video)
+            self._ai_video_buttons.append(btn_ai_video)
         toolbar.addStretch()
         layout.addLayout(toolbar)
 
@@ -555,6 +563,11 @@ class EventWidget(QWidget):
 
             btn_ai.clicked.connect(
                 lambda: open_ai_generate_dialog(
+                    page, "events", _on_ai_add,
+                )
+            )
+            btn_ai_video.clicked.connect(
+                lambda: open_ai_video_gen_dialog(
                     page, "events", _on_ai_add,
                 )
             )
@@ -1133,6 +1146,11 @@ class EventWidget(QWidget):
 
     def _resolve_pack_folder(self) -> str:
         """Return the pack's root folder, trying multiple sources."""
+        # 0. Folder the pack was imported from (always set on import, even
+        #    when no background/overlay names are declared)
+        src_folder = self._pm.data.get("source_folder") or ""
+        if src_folder and os.path.isdir(src_folder):
+            return src_folder
         # 1. Dialog source path (set when user adds a JSON manually)
         if self._current_dlg_row >= 0:
             dlgs = [e for e in self._pm.data.get("events", []) if e.get("type") == "dialog"]

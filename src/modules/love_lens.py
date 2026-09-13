@@ -16,7 +16,7 @@ from app_debug import dlog as _dlog
 from modules.image_utils import ASSET_FILTER, load_pixmap
 from modules.tooltips import set_tip
 from ui.image_viewer import attach_viewer
-from modules.ai_image_gen import open_ai_generate_dialog
+from modules.ai_image_gen import open_ai_generate_dialog, open_ai_video_gen_dialog
 
 if TYPE_CHECKING:
     from modules.pack_manager import PackManager
@@ -111,14 +111,18 @@ class LoveLensWidget(QWidget):
         self._pm = pack_manager
         self._slot_panels: dict = {}
         self._ai_buttons: list = []
+        self._ai_video_buttons: list = []
         self._build_ui()
 
     def update_ai_availability(self) -> None:
-        """Hide AI Generate buttons when no diffusion plugin is available."""
-        from modules.ai_image_gen import has_any_backend
+        """Hide AI Generate buttons when no diffusion/video plugin is available."""
+        from modules.ai_image_gen import has_any_backend, has_any_video_backend
         visible = has_any_backend()
         for btn in self._ai_buttons:
             btn.setVisible(visible)
+        video_visible = has_any_video_backend()
+        for btn in self._ai_video_buttons:
+            btn.setVisible(video_visible)
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -263,6 +267,12 @@ class LoveLensWidget(QWidget):
             file_toolbar.addSpacing(8)
             file_toolbar.addWidget(btn_ai)
             self._ai_buttons.append(btn_ai)
+            btn_ai_video = None
+            if ai_widget_type == "love_lens_overlays":
+                btn_ai_video = QPushButton("AI Generate Video…")
+                btn_ai_video.setFixedWidth(130)
+                file_toolbar.addWidget(btn_ai_video)
+                self._ai_video_buttons.append(btn_ai_video)
         file_toolbar.addStretch()
         right_layout.addLayout(file_toolbar)
 
@@ -419,6 +429,12 @@ class LoveLensWidget(QWidget):
                     page, ai_widget_type, _on_ai_add,
                 )
             )
+            if btn_ai_video is not None:
+                btn_ai_video.clicked.connect(
+                    lambda: open_ai_video_gen_dialog(
+                        page, ai_widget_type, _on_ai_add,
+                    )
+                )
 
         self._slot_panels[data_key] = (slot_list, files_list, slots)
         return page
