@@ -46,9 +46,19 @@ from modules.picture_widget import (  # noqa: E402
     SNAPSHOT_POSITIONS, LEWD_POSITIONS,
     SNAPSHOT_TYPES, LEWD_TYPES,
 )
+# Naughty Nightmares positions/types live in ai_image_gen.py (not picture_widget.py,
+# since they're AI-generation prompt keys, not engine-native Position/Type dropdown
+# choices — see docs/NaughtyNightmares_BonusPack_Analysis.md §3). Blueprint filenames
+# must match these dict keys exactly since _find_blueprint_for() looks them up by key.
+from modules.ai_image_gen import (  # noqa: E402
+    NAUGHTY_NIGHTMARES_PHOTO_TYPES, NAUGHTY_NIGHTMARES_PHOTO_MODIFIERS,
+)
 
-_ALL_POSITIONS = frozenset(k for k, _ in SNAPSHOT_POSITIONS + LEWD_POSITIONS)
-_ALL_TYPES = frozenset(SNAPSHOT_TYPES + LEWD_TYPES)
+_ALL_POSITIONS = (
+    frozenset(k for k, _ in SNAPSHOT_POSITIONS + LEWD_POSITIONS)
+    | frozenset(NAUGHTY_NIGHTMARES_PHOTO_TYPES)
+)
+_ALL_TYPES = frozenset(SNAPSHOT_TYPES + LEWD_TYPES) | frozenset(NAUGHTY_NIGHTMARES_PHOTO_MODIFIERS)
 
 _IMAGE_EXTS = (".pna", ".dat", ".png", ".jpa")
 

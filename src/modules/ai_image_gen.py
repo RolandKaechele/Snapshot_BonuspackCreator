@@ -561,14 +561,112 @@ LEWD_SHORES_PHOTO_MODIFIERS: dict[str, dict] = {
     },
 }
 
+# Naughty Nightmares-specific entries, layered on top of the base Snapshot! dicts
+# (NAUGHTY_NIGHTMARES_PHOTO_TYPES/_MODIFIERS = PHOTO_TYPES/SNAPSHOT_PHOTO_MODIFIERS
+# plus the custom position/type tokens discovered in the game's own bonus packs —
+# see docs/NaughtyNightmares_BonusPack_Analysis.md §3).
+NAUGHTY_NIGHTMARES_PHOTO_TYPES: dict[str, dict] = {
+    **PHOTO_TYPES,
+    "ghostHands": {
+        "label": "Ghost Hands",
+        "prompt_enhancement": (
+            "nsfw, "
+            "disembodied ghostly hands reaching from darkness, groping touch, "
+            "haunted atmosphere, horror anime style, high quality"
+        ),
+    },
+    "demon": {
+        "label": "Demon Encounter",
+        "prompt_enhancement": (
+            "nsfw, "
+            "demonic creature looming nearby, glowing red eyes, horns, "
+            "horror atmosphere, anime style, high quality"
+        ),
+    },
+    "psycho": {
+        "label": "Psycho Stalker",
+        "prompt_enhancement": (
+            "nsfw, "
+            "masked slasher villain stalking in the shadows, "
+            "horror movie atmosphere, anime style, high quality"
+        ),
+    },
+}
+
+NAUGHTY_NIGHTMARES_PHOTO_MODIFIERS: dict[str, dict] = {
+    **SNAPSHOT_PHOTO_MODIFIERS,
+    "monster-cock-attack": {
+        "label": "Monster Cock Attack",
+        "prompt_enhancement": "giant monstrous cock, overwhelmed expression",
+    },
+    "hunter": {
+        "label": "On The Hunt",
+        "prompt_enhancement": "predatory werewolf pose, stalking prey",
+    },
+    "victim": {
+        "label": "With Victim",
+        "prompt_enhancement": "cornered prey pose, fearful expression",
+    },
+    "pussyview": {
+        "label": "Pussy View",
+        "prompt_enhancement": "close-up vagina view",
+    },
+    "69": {
+        "label": "69",
+        "prompt_enhancement": "69 sex position, mutual oral",
+    },
+    "best-friends": {
+        "label": "Best Friends",
+        "prompt_enhancement": "playful duo pose, implied partner",
+    },
+    "cameltoe": {
+        "label": "Cameltoe",
+        "prompt_enhancement": "cameltoe visible through tight clothing",
+    },
+    "carrying": {
+        "label": "Carrying",
+        "prompt_enhancement": "being carried, princess carry pose",
+    },
+    "cowgirl": {
+        "label": "Cowgirl",
+        "prompt_enhancement": "cowgirl sex position",
+    },
+    "doggystyle": {
+        "label": "Doggystyle",
+        "prompt_enhancement": "doggystyle sex position",
+    },
+    "reverse-cowgirl": {
+        "label": "Reverse Cowgirl",
+        "prompt_enhancement": "reverse cowgirl sex position",
+    },
+    "enid-sinclair": {
+        "label": "Enid Sinclair",
+        "prompt_enhancement": "colorful rebellious punk cosplay, werewolf theme",
+    },
+    "wednesday-addams": {
+        "label": "Wednesday Addams",
+        "prompt_enhancement": "gothic school uniform cosplay, braided pigtails, deadpan goth style",
+    },
+    "thing": {
+        "label": "Thing",
+        "prompt_enhancement": "spooky Addams Family theme, eerie disembodied hand prop nearby",
+    },
+    "halloween-costumes": {
+        "label": "Halloween Costumes",
+        "prompt_enhancement": "wearing halloween costume",
+    },
+}
+
 PHOTO_MODIFIER_TYPES: dict[str, dict[str, dict]] = {
     "photos": SNAPSHOT_PHOTO_MODIFIERS,
     "photos_lewdshores": LEWD_SHORES_PHOTO_MODIFIERS,
+    "photos_naughtynightmares": NAUGHTY_NIGHTMARES_PHOTO_MODIFIERS,
 }
 
 WIDGET_TYPES: dict[str, dict[str, dict]] = {
     "photos": PHOTO_TYPES,
     "photos_lewdshores": LEWD_SHORES_PHOTO_TYPES,
+    "photos_naughtynightmares": NAUGHTY_NIGHTMARES_PHOTO_TYPES,
     "love_lens": LOVE_LENS_TYPES,
     "love_lens_overlays": LOVE_LENS_OVERLAY_TYPES,
     "events": EVENT_TYPES,
@@ -593,6 +691,8 @@ _PROMPT_CATEGORIES: dict[str, dict] = {
     "LEWD_SHORES_PHOTO_TYPES": LEWD_SHORES_PHOTO_TYPES,
     "SNAPSHOT_PHOTO_MODIFIERS": SNAPSHOT_PHOTO_MODIFIERS,
     "LEWD_SHORES_PHOTO_MODIFIERS": LEWD_SHORES_PHOTO_MODIFIERS,
+    "NAUGHTY_NIGHTMARES_PHOTO_TYPES": NAUGHTY_NIGHTMARES_PHOTO_TYPES,
+    "NAUGHTY_NIGHTMARES_PHOTO_MODIFIERS": NAUGHTY_NIGHTMARES_PHOTO_MODIFIERS,
 }
 
 
@@ -636,7 +736,7 @@ reload_prompts()
 
 # Widget types that generate character images (solo prefix is injected automatically).
 _CHAR_WIDGET_TYPES: frozenset[str] = frozenset(
-    {"photos", "photos_lewdshores", "love_lens", "love_lens_overlays"}
+    {"photos", "photos_lewdshores", "photos_naughtynightmares", "love_lens", "love_lens_overlays"}
 )
 
 # ─── Perchance API helpers ────────────────────────────────────────────────────
@@ -924,7 +1024,7 @@ class AiImageGenDialog(QDialog):
     """
     Prompt editor + generate trigger for the perchance.org txt2img service.
 
-    widget_type  : "photos" | "love_lens" | "events"
+    widget_type  : "photos" | "photos_lewdshores" | "photos_naughtynightmares" | "love_lens" | "love_lens_overlays" | "events"
     on_accepted  : called with list[str] of selected temp-file paths
     """
 
@@ -1373,6 +1473,7 @@ class AiImageGenDialog(QDialog):
     _GAME_BLUEPRINT_SUBDIR: dict[str, str] = {
         "photos": "snapshot",
         "photos_lewdshores": "lewdshores",
+        "photos_naughtynightmares": "naughtynightmares",
     }
 
     def _find_blueprint_for(self, pos_key: str, mod_key: str) -> str | None:

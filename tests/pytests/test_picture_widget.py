@@ -114,6 +114,41 @@ def test_thumbnail_label_hidden_by_default(widget):
     assert not widget._lbl_multi.isVisible()
 
 
+# ── AI Generate widget_type routing per game ─────────────────────────────────
+
+def test_ai_generate_uses_photos_widget_type_for_snapshot(widget, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        "modules.picture_widget.open_ai_generate_dialog",
+        lambda parent, wtype, *a, **k: captured.setdefault("wtype", wtype),
+    )
+    widget._pm.set("game", "snapshot")
+    widget._on_ai_generate()
+    assert captured["wtype"] == "photos"
+
+
+def test_ai_generate_uses_lewdshores_widget_type(widget, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        "modules.picture_widget.open_ai_generate_dialog",
+        lambda parent, wtype, *a, **k: captured.setdefault("wtype", wtype),
+    )
+    widget._pm.set("game", "lewdshores")
+    widget._on_ai_generate()
+    assert captured["wtype"] == "photos_lewdshores"
+
+
+def test_ai_generate_uses_naughtynightmares_widget_type(widget, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        "modules.picture_widget.open_ai_generate_dialog",
+        lambda parent, wtype, *a, **k: captured.setdefault("wtype", wtype),
+    )
+    widget._pm.set("game", "naughtynightmares")
+    widget._on_ai_generate()
+    assert captured["wtype"] == "photos_naughtynightmares"
+
+
 # ── Removal confirmation (delete / move / keep / cancel) ────────────────────
 
 def _add_photo_with_file(widget, tmp_path, name="photo1.png"):

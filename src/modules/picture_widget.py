@@ -278,7 +278,13 @@ class PictureWidget(QWidget):
         self._add_image_paths(paths)
 
     def _on_ai_generate(self) -> None:
-        wtype = "photos_lewdshores" if self._pm.get("game") == "lewdshores" else "photos"
+        game = self._pm.get("game")
+        if game == "lewdshores":
+            wtype = "photos_lewdshores"
+        elif game == "naughtynightmares":
+            wtype = "photos_naughtynightmares"
+        else:
+            wtype = "photos"
         open_ai_generate_dialog(self, wtype, self._on_ai_accepted, output_dir=None)
 
     def update_ai_availability(self) -> None:

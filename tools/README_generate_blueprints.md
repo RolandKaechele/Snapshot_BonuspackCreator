@@ -12,7 +12,12 @@ silhouette; the background is partially desaturated.
 Output: `src/assets/blueprints/<position>_<type>_<n>.png` (1024 × 1024 px PNG)
 
 Positions and types are imported live from `src/modules/picture_widget.py`
-(`SNAPSHOT_POSITIONS`, `LEWD_POSITIONS`, `SNAPSHOT_TYPES`, `LEWD_TYPES`).
+(`SNAPSHOT_POSITIONS`, `LEWD_POSITIONS`, `SNAPSHOT_TYPES`, `LEWD_TYPES`) and
+from `src/modules/ai_image_gen.py` (`NAUGHTY_NIGHTMARES_PHOTO_TYPES`,
+`NAUGHTY_NIGHTMARES_PHOTO_MODIFIERS`) — the latter two are AI-generation
+prompt-dictionary keys (not engine Position/Type dropdown values), since
+`AiImageGenDialog._find_blueprint_for()` looks blueprints up by those exact
+keys for Naughty Nightmares packs.
 
 ## Requirements
 
@@ -104,8 +109,29 @@ venv\Scripts\python.exe tools\generate_blueprints.py ^
     --overwrite
 ```
 
+**Naughty Nightmares** (custom position/type tokens from its own bonus packs,
+output into a dedicated game subfolder consumed by
+`AiImageGenDialog._GAME_BLUEPRINT_SUBDIR["photos_naughtynightmares"]`):
+
+```bat
+venv\Scripts\python.exe tools\generate_blueprints.py ^
+    --roots "tests\bonuscontent\orig\Snapshot! Naughty Nightmares\NaughtyNightmares_BonusPack_monstercockattack\NaughtyNightmares_BonusPack_monstercockattack" ^
+            "tests\bonuscontent\orig\Snapshot! Naughty Nightmares\NaughtyNightmares_BonusPack_murderclub\NaughtyNightmares_BonusPack_murderclub" ^
+            "tests\bonuscontent\orig\Snapshot! Naughty Nightmares\NaughtyNightmares_BonusPack_naughtywednesday\NaughtyNightmares_BonusPack_naughtywednesday" ^
+    --out-dir src\assets\blueprints\naughtynightmares ^
+    --position ghostHands demon psycho bench ^
+    --type monster-cock-attack hunter victim pussyview 69 best-friends cameltoe ^
+           carrying cowgirl doggystyle reverse-cowgirl enid-sinclair wednesday-addams ^
+           thing halloween-costumes flashing plain
+```
+
 ## Coverage
 
 The script currently covers **27 of 31** canonical positions (the remaining 4
 have no source images in the test pack set).  The full grid is
 27 × 26 = **702 blueprints** (up to 9 variants each).
+
+The Naughty Nightmares subfolder covers all 4 observed positions × 17 types
+(bench, ghostHands, demon, psycho) — see the invocation above; it was
+generated with `--variants 2` (not the default 9) since rembg/onnxruntime
+inference is CPU-only in this environment (~40s/image).

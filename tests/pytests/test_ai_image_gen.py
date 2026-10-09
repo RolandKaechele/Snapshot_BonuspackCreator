@@ -1,5 +1,6 @@
 """Tests for ai_image_gen — type/modifier dictionaries and dialog logic (no network)."""
 
+import os
 import pytest
 
 
@@ -55,6 +56,42 @@ def test_lewd_shores_photo_modifiers_keys_match_lewd_types(aig):
         assert key in LEWD_TYPES, f"modifier key {key!r} not in LEWD_TYPES"
 
 
+# ── NAUGHTY_NIGHTMARES_PHOTO_TYPES / _MODIFIERS ───────────────────────────────
+
+def test_naughty_nightmares_photo_types_has_custom_positions(aig):
+    for key in ("ghostHands", "demon", "psycho"):
+        assert key in aig.NAUGHTY_NIGHTMARES_PHOTO_TYPES
+
+
+def test_naughty_nightmares_photo_types_is_superset_of_photo_types(aig):
+    assert set(aig.PHOTO_TYPES) <= set(aig.NAUGHTY_NIGHTMARES_PHOTO_TYPES)
+
+
+def test_naughty_nightmares_photo_types_all_have_label_and_prompt(aig):
+    for key, info in aig.NAUGHTY_NIGHTMARES_PHOTO_TYPES.items():
+        assert "label" in info, f"NAUGHTY_NIGHTMARES_PHOTO_TYPES[{key!r}] missing 'label'"
+        assert "prompt_enhancement" in info, \
+            f"NAUGHTY_NIGHTMARES_PHOTO_TYPES[{key!r}] missing 'prompt_enhancement'"
+
+
+def test_naughty_nightmares_photo_modifiers_has_custom_types(aig):
+    for key in ("monster-cock-attack", "hunter", "victim", "pussyview", "69",
+                "best-friends", "cameltoe", "carrying", "cowgirl", "doggystyle",
+                "reverse-cowgirl", "enid-sinclair", "wednesday-addams", "thing",
+                "halloween-costumes"):
+        assert key in aig.NAUGHTY_NIGHTMARES_PHOTO_MODIFIERS
+
+
+def test_naughty_nightmares_photo_modifiers_is_superset_of_snapshot_modifiers(aig):
+    assert set(aig.SNAPSHOT_PHOTO_MODIFIERS) <= set(aig.NAUGHTY_NIGHTMARES_PHOTO_MODIFIERS)
+
+
+def test_naughty_nightmares_photo_modifiers_all_have_label_and_prompt(aig):
+    for key, info in aig.NAUGHTY_NIGHTMARES_PHOTO_MODIFIERS.items():
+        assert "label" in info
+        assert "prompt_enhancement" in info
+
+
 # ── WIDGET_TYPES routing ──────────────────────────────────────────────────────
 
 def test_widget_types_photos_entry(aig):
@@ -73,6 +110,10 @@ def test_widget_types_events_entry(aig):
     assert aig.WIDGET_TYPES["events"] is aig.EVENT_TYPES
 
 
+def test_widget_types_photos_naughtynightmares_entry(aig):
+    assert aig.WIDGET_TYPES["photos_naughtynightmares"] is aig.NAUGHTY_NIGHTMARES_PHOTO_TYPES
+
+
 # ── PHOTO_MODIFIER_TYPES routing ──────────────────────────────────────────────
 
 def test_photo_modifier_types_photos_entry(aig):
@@ -81,6 +122,40 @@ def test_photo_modifier_types_photos_entry(aig):
 
 def test_photo_modifier_types_lewdshores_entry(aig):
     assert aig.PHOTO_MODIFIER_TYPES["photos_lewdshores"] is aig.LEWD_SHORES_PHOTO_MODIFIERS
+
+
+def test_photo_modifier_types_naughtynightmares_entry(aig):
+    assert aig.PHOTO_MODIFIER_TYPES["photos_naughtynightmares"] is aig.NAUGHTY_NIGHTMARES_PHOTO_MODIFIERS
+
+
+# ── _CHAR_WIDGET_TYPES / blueprint subfolder routing ──────────────────────────
+
+def test_char_widget_types_includes_naughtynightmares(aig):
+    assert "photos_naughtynightmares" in aig._CHAR_WIDGET_TYPES
+
+
+def test_game_blueprint_subdir_maps_naughtynightmares(aig):
+    from modules.ai_image_gen import AiImageGenDialog
+    assert AiImageGenDialog._GAME_BLUEPRINT_SUBDIR["photos_naughtynightmares"] == "naughtynightmares"
+
+
+def test_find_blueprint_for_naughtynightmares_resolves_generated_file(qtbot):
+    """Integration check: the generated src/assets/blueprints/naughtynightmares/
+    files (gitignored, machine-local) are discoverable through the real lookup
+    code path. Skipped where that local asset folder hasn't been generated."""
+    bp_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "src", "assets", "blueprints", "naughtynightmares",
+    )
+    if not os.path.isdir(bp_dir) or not os.listdir(bp_dir):
+        pytest.skip("src/assets/blueprints/naughtynightmares not generated on this machine")
+    from modules.ai_image_gen import AiImageGenDialog
+    dlg = AiImageGenDialog(None, "photos_naughtynightmares", lambda d: None)
+    qtbot.addWidget(dlg)
+    bp = dlg._find_blueprint_for("ghostHands", "monster-cock-attack")
+    assert bp is not None
+    assert "naughtynightmares" in bp.replace("\\", "/")
+    assert "ghostHands_monster-cock-attack" in os.path.basename(bp)
 
 
 # ── AiImageGenDialog — form builds without error ──────────────────────────────

@@ -72,9 +72,17 @@ def test_game_filter_lewdshores_hides_snapshot_only_tabs(dialog):
 
 def test_game_filter_snapshot_hides_lewdshores_only_tabs(dialog):
     dialog._cmb_game.setCurrentIndex(dialog._cmb_game.findData("snapshot"))
-    from modules.prompt_editor_dialog import _CATEGORY_KEYS
+    from modules.prompt_editor_dialog import _CATEGORY_KEYS, _CATEGORY_GAME
     for i, key in enumerate(_CATEGORY_KEYS):
-        expected_visible = key not in ("LEWD_SHORES_PHOTO_TYPES", "LEWD_SHORES_PHOTO_MODIFIERS")
+        expected_visible = _CATEGORY_GAME.get(key) in (None, "snapshot")
+        assert dialog._tabs.isTabVisible(i) == expected_visible
+
+
+def test_game_filter_naughtynightmares_shows_only_its_own_tabs(dialog):
+    dialog._cmb_game.setCurrentIndex(dialog._cmb_game.findData("naughtynightmares"))
+    from modules.prompt_editor_dialog import _CATEGORY_KEYS, _CATEGORY_GAME
+    for i, key in enumerate(_CATEGORY_KEYS):
+        expected_visible = _CATEGORY_GAME.get(key) in (None, "naughtynightmares")
         assert dialog._tabs.isTabVisible(i) == expected_visible
 
 

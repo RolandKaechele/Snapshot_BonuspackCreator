@@ -17,7 +17,8 @@ from modules import ai_image_gen
 # Sorted alphabetically so tabs appear in a predictable order.
 _CATEGORY_KEYS = (
     "EVENT_TYPES", "LEWD_SHORES_PHOTO_MODIFIERS", "LEWD_SHORES_PHOTO_TYPES",
-    "LOVE_LENS_OVERLAY_TYPES", "LOVE_LENS_TYPES", "PHOTO_TYPES", "SNAPSHOT_PHOTO_MODIFIERS",
+    "LOVE_LENS_OVERLAY_TYPES", "LOVE_LENS_TYPES", "NAUGHTY_NIGHTMARES_PHOTO_MODIFIERS",
+    "NAUGHTY_NIGHTMARES_PHOTO_TYPES", "PHOTO_TYPES", "SNAPSHOT_PHOTO_MODIFIERS",
 )
 _COLUMNS = ("Key", "Label", "Prompt Enhancement", "Negative Prompt")
 
@@ -31,6 +32,8 @@ _CATEGORY_GAME: dict[str, str | None] = {
     "EVENT_TYPES": "snapshot",
     "LEWD_SHORES_PHOTO_TYPES": "lewdshores",
     "LEWD_SHORES_PHOTO_MODIFIERS": "lewdshores",
+    "NAUGHTY_NIGHTMARES_PHOTO_TYPES": "naughtynightmares",
+    "NAUGHTY_NIGHTMARES_PHOTO_MODIFIERS": "naughtynightmares",
 }
 
 
@@ -81,6 +84,7 @@ class PromptEditorDialog(QDialog):
         self._cmb_game.addItem("All Games", "")
         self._cmb_game.addItem("Snapshot", "snapshot")
         self._cmb_game.addItem("Lewd Shores", "lewdshores")
+        self._cmb_game.addItem("Naughty Nightmares", "naughtynightmares")
         self._cmb_game.currentIndexChanged.connect(self._apply_game_filter)
         game_row.addWidget(self._cmb_game)
         game_row.addStretch()
