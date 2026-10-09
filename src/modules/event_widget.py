@@ -7,15 +7,18 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import (  # type: ignore
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QListWidget, QListWidgetItem, QFileDialog, QFormLayout,
-    QComboBox, QTabWidget, QSplitter, QPlainTextEdit, QLineEdit,
+    QComboBox, QTabWidget, QSplitter, QPlainTextEdit, QLineEdit, QDialog,
     QScrollArea, QTableWidget, QTableWidgetItem, QHeaderView,
     QAbstractItemView, QStyledItemDelegate, QStackedWidget,
     QSpinBox, QGroupBox, QCheckBox, QFrame, QInputDialog, QMenu,
 )
 from PyQt6.QtGui import QPalette, QIcon, QPixmap, QPainter, QFont  # type: ignore
-from PyQt6.QtCore import Qt  # type: ignore
+from PyQt6.QtCore import Qt, pyqtSignal  # type: ignore
 
 from app_debug import dlog as _dlog
+from modules.event_creator import (
+    EventBuilderDialog, build_event_dialog_data, suggest_photo_name,
+)
 from modules.dialog_graph import DialogGraphWidget, DialogGraphWindow
 from modules.dialog_player import DialogPlayerWindow
 from modules.image_utils import (
@@ -388,6 +391,8 @@ def validate_events(events: list) -> list:
 class EventWidget(QWidget):
     """Manages city-event backgrounds, overlays, and dialog trees."""
 
+    photos_changed = pyqtSignal()
+
     def __init__(self, pack_manager: "PackManager") -> None:
         super().__init__()
         self._pm = pack_manager
@@ -426,6 +431,11 @@ class EventWidget(QWidget):
         self._cmb_event_type.currentIndexChanged.connect(self._save_event_type)
         top_row.addWidget(lbl_type)
         top_row.addWidget(self._cmb_event_type)
+        self._btn_build_event = QPushButton("Build Event…")
+        self._btn_build_event.setToolTip(
+            "Create a branched city-event scene, optionally with an event-photo reward.")
+        self._btn_build_event.clicked.connect(self._on_build_event)
+        top_row.addWidget(self._btn_build_event)
         top_row.addStretch()
         root.addLayout(top_row)
 
@@ -1695,6 +1705,86 @@ class EventWidget(QWidget):
     def _save_event_type(self) -> None:
         self._pm.set("event_type", self._cmb_event_type.currentText())
 
+    def _on_build_event(self) -> None:
+        dialog = EventBuilderDialog(self._pm.data, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        config = dialog.event_data()
+
+        events = list(self._pm.data.get("events", []))
+        photo_name = ""
+        photos = list(self._pm.data.get("photos", []))
+        photo_added = False
+        photo_path = config["photo_path"]
+        if photo_path:
+            normalized_path = os.path.normcase(os.path.abspath(photo_path))
+            existing_photo = next(
+                (
+                    photo for photo in photos
+                    if photo.get("source")
+                    and os.path.normcase(os.path.abspath(photo["source"])) == normalized_path
+                ),
+                None,
+            )
+            if existing_photo:
+                photo_name = existing_photo.get("name", "")
+                if not photo_name:
+                    photo_name = suggest_photo_name(self._pm.get("id") or "event", photos)
+                    existing_photo["name"] = photo_name
+                    photo_added = True
+            else:
+                photo_name = suggest_photo_name(self._pm.get("id") or "event", photos)
+                photos.append({
+                    "name": photo_name,
+                    "source": photo_path,
+                    "position": "event",
+                    "type": config["photo_type"],
+                    "color": config["photo_color"],
+                    "overwrite_type": "",
+                    "overwrite_color": "",
+                    "thumbnail": False,
+                })
+                photo_added = True
+
+        dialog_data = build_event_dialog_data(
+            config["dialog_id"],
+            config["speaker"],
+            config["prompt"],
+            config["first_choice"],
+            config["second_choice"],
+            config["closing_line"],
+            event_type=config["event_type"],
+            photo_name=photo_name,
+            sound_name=config["sound_name"],
+        )
+        events.append({
+            "type": "dialog",
+            "name": config["name"],
+            "source": None,
+            "content": json.dumps(dialog_data, ensure_ascii=False, indent=2),
+        })
+
+        if photo_added:
+            self._pm.data["photos"] = photos
+        self._pm.data["events"] = events
+        self._pm.set("event_type", config["event_type"])
+        self.refresh()
+        dialog_row = sum(1 for event in events if event.get("type") == "dialog") - 1
+        self._dlg_list.setCurrentRow(dialog_row)
+        if photo_added:
+            self.photos_changed.emit()
+        _dlog(
+            "EventWidget._on_build_event",
+            f"Created {config['name']} (dialog ID {config['dialog_id']})",
+        )
+        show_info(
+            self, "Event Created",
+            f"Created dialog scene '{config['name']}'."
+            + ("\nThe selected photo was registered and assigned to its reward choice."
+               if photo_added else ""),
+            tag="EventWidget._on_build_event",
+        )
+
     # ── Refresh ───────────────────────────────────────────────────────────
 
     def _rebuild_lists(self) -> None:
@@ -1765,4 +1855,3 @@ class EventWidget(QWidget):
             self._tabs.setCurrentIndex(1)
         elif has_dlg:
             self._tabs.setCurrentIndex(2)
-

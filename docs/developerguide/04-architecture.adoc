@@ -77,6 +77,9 @@ Call `set_tip(widget, key)` to attach a tooltip — this keeps tooltip text out 
 | `modules/event_widget.py`
 | `EventWidget` — Backgrounds/Overlays (list + live preview) and Dialogs (3-pane: scene list / node list / node form); scene list toolbar (*New Scene…*, *Import Scene…*, *Remove*) and template row (*Template* combo + *Add From Template*); scene-list context menu (New Scene…, Import Scene…, Rename…, Delete, Save As Template…); `_extract_nodes`, `_write_nodes`, `_remap_refs` — flat nd_* JSON helpers; `validate_events(events)` — module-level validation used by export
 
+| `modules/event_creator.py`
+| `EventBuilderDialog` — native branched city-event scaffold, optional event-photo registration/reward, Explosion Lens preset, and unused dialogue-ID selection
+
 | `modules/city_events_templates.py`
 | `load_templates(path=None)` / `add_template(name, dialog, description, path=None)` — read/append starter scenes in `city_events_templates.json`; `default_template_file()` resolves the path beside `main.py` in dev, or beside the exe when frozen
 

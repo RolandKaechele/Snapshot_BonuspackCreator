@@ -22,6 +22,12 @@ Overlay images are layered over the background during the event in-game.
 
 The Dialogs sub-tab has three vertical panels separated by resizable splitters.
 
+==== Build Event
+
+Click *Build Event…* to create a ready-to-edit branched scene with two player choices and a closing `endEvent` command. Choose the scene name, event type, speaker, dialogue, choices, and closing line. The scene receives an unused dialogue ID starting in the pack's ID range.
+
+Choose *explosion* to include the built-in Explosion Lens background, `pulseBackground`, and an optional sound command. A reward photo is optional; when selected, it is added to the Photos tab with Position `event` and the chosen Type and Color, then shown and unlocked by the first choice. The generated scene is selected in the editor so you can continue refining it, its commands, and its graph.
+
 ==== Scene List (left panel)
 
 Click *New Scene…* to create a blank scene by name — no file is needed; its content is written out automatically on save/export.

@@ -92,7 +92,7 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_installer.exe`.
 │   │   ├── image_viewer.py     Zoomable image viewer dialog; attach_viewer() helper
 │   │   └── style.qss           Application stylesheet (Catppuccin Mocha)
 │   └── modules/
-        ├── pack_manager.py     Load / Save pack JSON; dirty tracking (`is_dirty`)
+|       ├── pack_manager.py     Load / Save pack JSON; dirty tracking (`is_dirty`)
 │       ├── import_export.py    Import / Export bonus content
 │       ├── pack_info_widget.py Pack Info tab (identity, defaults, category, traits)
 │       ├── tooltips.py         Central tooltip registry
