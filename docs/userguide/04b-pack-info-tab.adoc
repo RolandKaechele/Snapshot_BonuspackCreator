@@ -16,10 +16,10 @@ It is divided into three sub-tabs.
 | Display name shown in the game's collection screen
 
 | Game
-| Target game — *Snapshot!* or *Lewd Shores*. Selecting Lewd Shores hides the Snapshot!-only tabs (City Events, Cutscenes, Love Lens).
+| Target game — *Snapshot!*, *Lewd Shores*, or *Naughty Nightmares*. Selecting Lewd Shores hides the Snapshot!-only tabs (City Events, Cutscenes, Love Lens). Selecting Naughty Nightmares locks Pack Type to *Photos* (Events and Love Lens are not supported for that game).
 
 | Pack Type
-| *Photos*, *Events*, or *Love Lens*
+| *Photos*, *Events*, or *Love Lens*. Only *Photos* is available when Game is set to *Naughty Nightmares*.
 
 | ID Range
 | Numeric range for photo IDs (e.g. `110400-110499`). Leave empty to let the exporter assign IDs automatically.
@@ -30,6 +30,8 @@ TIP: Click *🎮 Get ID on Discord* to open the Snapshot! Discord server and req
 === Defaults
 
 Sets the fallback position, type, and color that the game uses for photos that do not specify their own values (`[Defaults]` section of `pack.ini`).
+The Position/Type/Color dropdowns are editable — type a custom value (e.g. a `[Special Traits]` alias token like `ghostHands`) if it isn't in the list; it's kept and exported verbatim.
+The Category field is always shown, regardless of the selected Game.
 
 === Category & Traits
 

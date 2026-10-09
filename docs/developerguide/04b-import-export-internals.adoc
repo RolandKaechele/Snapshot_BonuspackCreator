@@ -25,7 +25,7 @@ Reads one ini file and returns a plain `dict`.  Key fields populated:
 |===
 | Key | Source
 
-| `game` | `gameID` / `plugID` in `[Mod]` / `[Pack]`; `"snapshot"` or `"lewdshores"`
+| `game` | `gameID` / `plugID` in `[Mod]` / `[Pack]`; `"snapshot"`, `"lewdshores"`, or `"naughtynightmares"` (from `plugID=naughtynightmares`)
 | `id`, `id_range`, `title` | `[Mod]` / `[Pack]` identity fields
 | `pack_type` | `"events"` if `type=events` in `[Mod]`; `"lovelens"` if `[Hypnosis]` section present; otherwise `"photos"`
 | `defaults_position` … | `[Defaults]` values read as structured fields, not passthrough
@@ -58,16 +58,18 @@ After reading all parts, `run_import` merges them:
 
 ==== Folder naming
 
-`{GamePrefix}_{FolderKind}_{pack_id}`
+`{GamePrefix}_{FolderKind}_{pack_id}` (see `_game_folder_prefix()`)
 
-* `GamePrefix`: `Snapshot` or `LewdShores`
+* `GamePrefix`: `Snapshot`, `LewdShores`, or `NaughtyNightmares`
 * `FolderKind`: `EventPack` (when `pack_type == "events"`) or `BonusPack`
 
 ==== ini splitting (`_write_pack_ini`)
 
-Photos are chunked at 100 per file.  Each chunk produces a separate ini file (`pack.ini` for single-part, `{id}1.ini` / `{id}2.ini` … for multi-part).
+Photos are normally chunked at 100 per file, producing a separate ini file per chunk (`pack.ini` for single-part, `{id}1.ini` / `{id}2.ini` … for multi-part).
 
-For each part:
+**Exception — wide-idrange preservation:** if the declared `idrange` already spans more than 100 IDs and is wide enough to cover every photo (`range_width > 100 and range_width >= photo_count`), the pack is kept as a **single** `pack.ini` with the original `idrange` written verbatim, instead of being force-split into 100-ID parts. This matches official packs that ship >100 photos under one wide range (e.g. `murderclub`: 104 photos under `idrange=200100-200299`). When the declared range is *not* wide enough for the photo count, the normal 100-per-part auto-split is used as a fallback.
+
+For each part (when splitting does occur):
 
 * `id` and `title` get a part-number suffix appended (`mypack1`, `"My Pack Part 1"`).
 * `idrange` is incremented by 100 per part.
@@ -86,6 +88,8 @@ Key name differences between games:
 | Trait color key | `specialColor=` | `newSpecial=`
 | Per-photo type | `photo.type=` | `photo.type=` (or `photo.newType=` if `_type_key` set)
 |===
+
+Naughty Nightmares packs (`game == "naughtynightmares"`) use the same `[Mod]` / `[Defaults]` / `[Special Category]` / `[Special Traits]` layout as Snapshot!, except `plugID=naughtynightmares` instead of `plugID=snapshot`. Pack Type is restricted to `"photos"` for this game — the Pack Info tab locks the Pack Type combo to *Photos* and `_write_pack_ini()`/`run_export()` only ever see `pack_type == "photos"` for it in practice.
 
 ==== File export (`_export_photo_files`)
 

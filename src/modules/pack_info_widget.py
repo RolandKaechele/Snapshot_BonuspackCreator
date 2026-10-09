@@ -56,10 +56,28 @@ _LS_SPECIALS = [
 _DISCORD_URL = "https://discord.com/invite/KtRr4WSyks"
 
 
+def _make_combo_editable(cmb: QComboBox) -> None:
+    """Allow typing a value that isn't in the predefined list (e.g. a custom
+    [Special Traits]/[Create your own traits] alias token such as "ghostHands"),
+    without inserting it as a permanent new item in the dropdown."""
+    cmb.setEditable(True)
+    cmb.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+
+
+# Game combo index -> internal game value (order must match _cmb_game.addItems()).
+_GAME_VALUES = ("snapshot", "lewdshores", "naughtynightmares")
+
+# Pack Type choices per game: (label, internal pack_type value).
+# Naughty Nightmares bonus packs only support Photos packs — Events and Love Lens
+# are not documented/supported for this game, so they're left out of its list.
+_ALL_PACK_TYPES = [("Photos", "photos"), ("Events", "events"), ("Love Lens", "lovelens")]
+_NAUGHTY_NIGHTMARES_PACK_TYPES = [("Photos", "photos")]
+
+
 class PackInfoWidget(QWidget):
     """First tab: pack identity, defaults, special category, and special traits."""
 
-    game_changed = pyqtSignal(str)  # emits "snapshot" or "lewdshores"
+    game_changed = pyqtSignal(str)  # emits "snapshot", "lewdshores", or "naughtynightmares"
 
     def __init__(self, pack_manager: "PackManager") -> None:
         super().__init__()
@@ -101,11 +119,12 @@ class PackInfoWidget(QWidget):
         set_tip(self._edit_title, "pack_title")
 
         self._cmb_game = QComboBox()
-        self._cmb_game.addItems(["Snapshot!", "Lewd Shores"])
+        self._cmb_game.addItems(["Snapshot!", "Lewd Shores", "Naughty Nightmares"])
         set_tip(self._cmb_game, "pack_game")
 
         self._cmb_type = QComboBox()
-        self._cmb_type.addItems(["Photos", "Events", "Love Lens"])
+        self._pack_type_keys: list[str] = [key for _, key in _ALL_PACK_TYPES]
+        self._cmb_type.addItems([label for label, _ in _ALL_PACK_TYPES])
         set_tip(self._cmb_type, "pack_type")
 
         # ID Range row: field + Discord button inline
@@ -162,14 +181,17 @@ class PackInfoWidget(QWidget):
         # ── Snapshot! rows ────────────────────────────────────────────────
         self._cmb_def_pos = QComboBox()
         self._cmb_def_pos.addItems(_POSITIONS)
+        _make_combo_editable(self._cmb_def_pos)
         set_tip(self._cmb_def_pos, "defaults_position")
 
         self._cmb_def_type = QComboBox()
         self._cmb_def_type.addItems(_TYPES)
+        _make_combo_editable(self._cmb_def_type)
         set_tip(self._cmb_def_type, "defaults_type")
 
         self._cmb_def_color = QComboBox()
         self._cmb_def_color.addItems(_COLORS)
+        _make_combo_editable(self._cmb_def_color)
         set_tip(self._cmb_def_color, "defaults_color")
 
         form.addRow("Default Position:", self._cmb_def_pos)
@@ -179,14 +201,17 @@ class PackInfoWidget(QWidget):
         # ── Lewd Shores rows ──────────────────────────────────────────────
         self._cmb_def_photo_pos = QComboBox()
         self._cmb_def_photo_pos.addItems(_LS_POSITIONS)
+        _make_combo_editable(self._cmb_def_photo_pos)
         set_tip(self._cmb_def_photo_pos, "defaults_position")
 
         self._cmb_def_ls_type = QComboBox()
         self._cmb_def_ls_type.addItems(_LS_TYPES)
+        _make_combo_editable(self._cmb_def_ls_type)
         set_tip(self._cmb_def_ls_type, "defaults_type")
 
         self._cmb_def_special = QComboBox()
         self._cmb_def_special.addItems(_LS_SPECIALS)
+        _make_combo_editable(self._cmb_def_special)
         set_tip(self._cmb_def_special, "defaults_color")
 
         self._edit_def_category = QLineEdit()
@@ -222,12 +247,14 @@ class PackInfoWidget(QWidget):
         form.addRow("Theme Color (hex):", self._theme_color_widget)
 
         # Connect signals
-        self._cmb_def_pos.currentIndexChanged.connect(self._save_defaults)
-        self._cmb_def_type.currentIndexChanged.connect(self._save_defaults)
-        self._cmb_def_color.currentIndexChanged.connect(self._save_defaults)
-        self._cmb_def_photo_pos.currentIndexChanged.connect(self._save_defaults)
-        self._cmb_def_ls_type.currentIndexChanged.connect(self._save_defaults)
-        self._cmb_def_special.currentIndexChanged.connect(self._save_defaults)
+        # currentTextChanged (not currentIndexChanged) so typed custom values
+        # (not in the predefined list) also persist, not just dropdown picks.
+        self._cmb_def_pos.currentTextChanged.connect(self._save_defaults)
+        self._cmb_def_type.currentTextChanged.connect(self._save_defaults)
+        self._cmb_def_color.currentTextChanged.connect(self._save_defaults)
+        self._cmb_def_photo_pos.currentTextChanged.connect(self._save_defaults)
+        self._cmb_def_ls_type.currentTextChanged.connect(self._save_defaults)
+        self._cmb_def_special.currentTextChanged.connect(self._save_defaults)
         self._edit_def_category.textChanged.connect(self._save_defaults)
         self._edit_def_pack_theme.textChanged.connect(self._save_defaults)
         self._edit_def_theme_color.textChanged.connect(self._on_theme_color_changed)
@@ -381,8 +408,8 @@ class PackInfoWidget(QWidget):
     # ── Game visibility ───────────────────────────────────────────────────
 
     def _apply_game_visibility(self, game: str) -> None:
-        is_snap = game == "snapshot"
-        is_ls = not is_snap
+        is_snap = game in ("snapshot", "naughtynightmares")
+        is_ls = game == "lewdshores"
 
         # Defaults tab rows
         self._form_defaults.setRowVisible(self._cmb_def_pos, is_snap)
@@ -391,12 +418,17 @@ class PackInfoWidget(QWidget):
         self._form_defaults.setRowVisible(self._cmb_def_photo_pos, is_ls)
         self._form_defaults.setRowVisible(self._cmb_def_ls_type, is_ls)
         self._form_defaults.setRowVisible(self._cmb_def_special, is_ls)
-        self._form_defaults.setRowVisible(self._edit_def_category, is_ls)
+        # Category is used by Snapshot!/Naughty Nightmares packs too (e.g. category=panty),
+        # not just Lewd Shores — always show it.
+        self._form_defaults.setRowVisible(self._edit_def_category, True)
         self._form_defaults.setRowVisible(self._edit_def_pack_theme, is_ls)
         self._form_defaults.setRowVisible(self._theme_color_widget, is_ls)
 
         # Category & Traits tab
         self._grp_special_category.setVisible(is_snap)
+
+        # Pack Type: Naughty Nightmares bonus packs only support Photos packs.
+        self._sync_pack_type_combo(game)
 
         # Update custom traits group title to reflect the ini section name used
         if is_snap:
@@ -407,6 +439,28 @@ class PackInfoWidget(QWidget):
             self._grp_special_traits.setTitle("[Create your own traits] \u2014 Custom type/special aliases")
             self._grp_type_aliases.setTitle("newType aliases")
             self._grp_color_aliases.setTitle("newSpecial aliases")
+
+    def _sync_pack_type_combo(self, game: str) -> None:
+        """Rebuild the Pack Type combo's choices for the given game.
+
+        Naughty Nightmares bonus packs only support Photos packs — Events and Love
+        Lens are hidden (and locked to Photos) when that game is selected.
+        """
+        options = _NAUGHTY_NIGHTMARES_PACK_TYPES if game == "naughtynightmares" else _ALL_PACK_TYPES
+        keys = [key for _, key in options]
+
+        current_key = self._pm.get("pack_type", "photos")
+        if current_key not in keys:
+            current_key = "photos"
+            self._pm.set("pack_type", current_key)
+
+        self._pack_type_keys = keys
+        self._cmb_type.blockSignals(True)
+        self._cmb_type.clear()
+        self._cmb_type.addItems([label for label, _ in options])
+        self._cmb_type.setCurrentIndex(keys.index(current_key))
+        self._cmb_type.setEnabled(len(options) > 1)
+        self._cmb_type.blockSignals(False)
 
 
 
@@ -447,10 +501,12 @@ class PackInfoWidget(QWidget):
     def _save_identity(self) -> None:
         self._pm.set("id", self._edit_id.text().strip())
         self._pm.set("title", self._edit_title.text())
-        game = "snapshot" if self._cmb_game.currentIndex() == 0 else "lewdshores"
+        g_idx = self._cmb_game.currentIndex()
+        game = _GAME_VALUES[g_idx] if 0 <= g_idx < len(_GAME_VALUES) else "snapshot"
         self._pm.set("game", game)
-        type_map = {0: "photos", 1: "events", 2: "lovelens"}
-        self._pm.set("pack_type", type_map.get(self._cmb_type.currentIndex(), "photos"))
+        t_idx = self._cmb_type.currentIndex()
+        pack_type = self._pack_type_keys[t_idx] if 0 <= t_idx < len(self._pack_type_keys) else "photos"
+        self._pm.set("pack_type", pack_type)
         self._pm.set("id_range", self._edit_idrange.text().strip())
         self.game_changed.emit(game)
 
@@ -546,10 +602,10 @@ class PackInfoWidget(QWidget):
         self._edit_title.setText(self._pm.get("title", ""))
 
         game = self._pm.get("game", "snapshot")
-        self._cmb_game.setCurrentIndex(0 if game == "snapshot" else 1)
+        self._cmb_game.setCurrentIndex(_GAME_VALUES.index(game) if game in _GAME_VALUES else 0)
 
-        type_map = {"photos": 0, "events": 1, "lovelens": 2}
-        self._cmb_type.setCurrentIndex(type_map.get(self._pm.get("pack_type", "photos"), 0))
+        # Pack Type combo choices/selection are rebuilt per-game in _apply_game_visibility()
+        # below (Naughty Nightmares restricts the list to "Photos").
 
         self._edit_idrange.setText(self._pm.get("id_range", ""))
 
@@ -558,6 +614,11 @@ class PackInfoWidget(QWidget):
                 if cmb.itemText(i).lower() == val.lower():
                     cmb.setCurrentIndex(i)
                     return
+            # Not a predefined choice (e.g. a custom [Special Traits] alias token like
+            # "ghostHands") — show it via the editable line-edit instead of silently
+            # falling back to whatever the combo previously displayed.
+            cmb.setCurrentIndex(-1)
+            cmb.setEditText(val)
 
         _set_combo(self._cmb_def_pos, self._pm.get("defaults_position", "upskirt"))
         _set_combo(self._cmb_def_type, self._pm.get("defaults_type", "plain"))

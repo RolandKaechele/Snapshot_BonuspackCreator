@@ -40,4 +40,5 @@ Copy the resulting folder into the game's `BonusContent\` directory:
 ----
 Snapshot!\BonusContent\Snapshot_BonusPack_<id>\
 Snapshot Lewd Shores\BonusContent\LewdShores_BonusPack_<id>\
+Snapshot Naughty Nightmares\BonusContent\NaughtyNightmares_BonusPack_<id>\
 ----

@@ -8,8 +8,22 @@ import pytest
 # Import only the private helpers — no Qt required
 from modules.import_export import (
     _read_pack_ini, _write_pack_ini, _export_photo_files,
-    _resolve_ini_paths, _inject_end_events,
+    _resolve_ini_paths, _inject_end_events, _game_folder_prefix,
 )
+
+
+# ── _game_folder_prefix ──────────────────────────────────────────────────────
+
+def test_game_folder_prefix_snapshot():
+    assert _game_folder_prefix("snapshot") == "Snapshot"
+
+
+def test_game_folder_prefix_lewdshores():
+    assert _game_folder_prefix("lewdshores") == "LewdShores"
+
+
+def test_game_folder_prefix_naughtynightmares():
+    assert _game_folder_prefix("naughtynightmares") == "NaughtyNightmares"
 
 
 # ── _write_pack_ini ──────────────────────────────────────────────────────────
@@ -64,6 +78,28 @@ def test_write_pack_ini_lewdshores_section(tmp_path):
     assert "[Pack]" in content
     assert "gameID=lewdshores" in content
     assert "id=lewdpack" in content
+
+
+def test_write_pack_ini_naughtynightmares_section(tmp_path):
+    data = {
+        "game": "naughtynightmares",
+        "pack_type": "photos",
+        "id": "monstercockattack",
+        "id_range": "200000-200099",
+        "title": "Monster Cock Attack",
+        "special_category": "Monster Cock Men",
+        "special_category_color": "#bd4200",
+        "photos": [],
+    }
+    _write_pack_ini(str(tmp_path), data)
+    content = (tmp_path / "pack.ini").read_text(encoding="utf-8")
+    assert "[Mod]" in content
+    assert "plugID=naughtynightmares" in content
+    assert "id=monstercockattack" in content
+    assert "idrange=200000-200099" in content
+    # [Special Category] must still be written for Naughty Nightmares (BUG-5 regression guard).
+    assert 'specialCategory="Monster Cock Men"' in content
+    assert "specialCategoryColor=bd4200" in content
 
 
 def test_write_pack_ini_photos_section(tmp_path):
@@ -121,6 +157,88 @@ def test_write_pack_ini_special_category(tmp_path):
     assert "specialCategoryColor=dea3a5" in content
 
 
+# ── Wide idrange preservation (don't force-split >100 photos when the declared
+# idrange already spans multiple 100-ID slots in a single ini) ──────────────
+
+def test_write_pack_ini_preserves_wide_range_single_file(tmp_path):
+    """Regression guard for the real murderclub pack: 104 photos under one
+    idrange=200100-200299 (200 wide) must stay a single pack.ini, not split
+    into murderclub1.ini/murderclub2.ini with truncated 100-wide ranges."""
+    photos = [
+        {"name": f"murderclub{i}", "position": "demon", "type": "hunter",
+         "color": "backview", "source": None}
+        for i in range(1, 105)
+    ]
+    data = {
+        "game": "naughtynightmares",
+        "pack_type": "photos",
+        "id": "murderclub",
+        "id_range": "200100-200299",
+        "title": "Murder Club",
+        "special_category": "Murder Club",
+        "special_category_color": "#b81f14",
+        "photos": photos,
+    }
+    _write_pack_ini(str(tmp_path), data)
+    # Single pack.ini, not murderclub1.ini/murderclub2.ini
+    assert (tmp_path / "pack.ini").exists()
+    assert not (tmp_path / "murderclub1.ini").exists()
+    assert not (tmp_path / "murderclub2.ini").exists()
+    content = (tmp_path / "pack.ini").read_text(encoding="utf-8")
+    assert "id=murderclub" in content
+    assert "idrange=200100-200299" in content
+    assert "Part 1" not in content
+    assert "names=" + ",".join(p["name"] for p in photos) in content
+
+
+def test_write_pack_ini_splits_when_range_too_narrow_for_photo_count(tmp_path):
+    """When the declared range is NOT wide enough for all photos, fall back to
+    the existing auto-split-at-100 behavior (unchanged pre-existing behavior)."""
+    photos = [
+        {"name": f"p{i}", "position": "upskirt", "type": "plain", "color": "white", "source": None}
+        for i in range(1, 151)
+    ]
+    data = {
+        "game": "snapshot",
+        "pack_type": "photos",
+        "id": "bigpack",
+        "id_range": "110000-110099",  # only 100 wide, but 150 photos
+        "title": "Big Pack",
+        "special_category": "",
+        "special_category_color": "#dea3a5",
+        "photos": photos,
+    }
+    _write_pack_ini(str(tmp_path), data)
+    assert (tmp_path / "bigpack1.ini").exists()
+    assert (tmp_path / "bigpack2.ini").exists()
+    part1 = (tmp_path / "bigpack1.ini").read_text(encoding="utf-8")
+    part2 = (tmp_path / "bigpack2.ini").read_text(encoding="utf-8")
+    assert "idrange=110000-110099" in part1
+    assert "idrange=110100-110199" in part2
+
+
+def test_write_pack_ini_narrow_range_with_few_photos_unchanged(tmp_path):
+    """100-wide range with photos comfortably inside it keeps behaving exactly
+    as before (no regression for the common case)."""
+    data = {
+        "game": "naughtynightmares",
+        "pack_type": "photos",
+        "id": "monstercockattack",
+        "id_range": "200000-200099",
+        "title": "Monster Cock Attack",
+        "special_category": "",
+        "special_category_color": "#dea3a5",
+        "photos": [
+            {"name": "monstercockattack1", "position": "ghostHands",
+             "type": "monster-cock-attack", "color": "teasing", "source": None},
+        ],
+    }
+    _write_pack_ini(str(tmp_path), data)
+    content = (tmp_path / "pack.ini").read_text(encoding="utf-8")
+    assert "idrange=200000-200099" in content
+    assert "id=monstercockattack" in content
+
+
 # ── _read_pack_ini ───────────────────────────────────────────────────────────
 
 def _make_ini(tmp_path, lines):
@@ -147,6 +265,37 @@ def test_read_pack_ini_lewdshores_game(tmp_path):
     ])
     data = _read_pack_ini(ini, str(tmp_path))
     assert data["game"] == "lewdshores"
+
+
+def test_read_pack_ini_naughtynightmares_game(tmp_path):
+    ini = _make_ini(tmp_path, [
+        "[Mod]", "plugID=naughtynightmares", "id=murderclub", "idrange=200100-200299",
+        'title="Murder Club"',
+        "[Photos]", "names=",
+    ])
+    data = _read_pack_ini(ini, str(tmp_path))
+    assert data["game"] == "naughtynightmares"
+    assert data["id"] == "murderclub"
+    assert data["id_range"] == "200100-200299"
+
+
+def test_naughtynightmares_plugid_roundtrips(tmp_path):
+    """Importing then re-exporting a Naughty Nightmares pack must keep plugID intact
+    (regression guard for the former hardcoded `plugID=snapshot` export bug)."""
+    ini = _make_ini(tmp_path, [
+        "[Mod]", "plugID=naughtynightmares", "id=murderclub", "idrange=200100-200299",
+        'title="Murder Club"',
+        "[Photos]", "names=",
+    ])
+    data = _read_pack_ini(ini, str(tmp_path))
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    data["special_category"] = data.get("special_category", "")
+    data["special_category_color"] = data.get("special_category_color", "#dea3a5")
+    _write_pack_ini(str(out_dir), data)
+    content = (out_dir / "pack.ini").read_text(encoding="utf-8")
+    assert "plugID=naughtynightmares" in content
+    assert "plugID=snapshot" not in content
 
 
 def test_read_pack_ini_detects_lovelens(tmp_path):

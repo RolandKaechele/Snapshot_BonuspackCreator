@@ -171,3 +171,62 @@ def test_remove_selected_no_dialog_when_file_missing(widget, monkeypatch):
     widget._on_remove_selected()
     assert not called
     assert widget._pm.data["photos"] == []
+
+
+# ── Custom (non-predefined) Position/Type/Color tokens ──────────────────────
+# e.g. Naughty Nightmares [Special Traits] alias tokens like "ghostHands" that
+# aren't in SNAPSHOT_POSITIONS/SNAPSHOT_TYPES/SNAPSHOT_COLORS.
+
+def _add_custom_photo(widget):
+    widget._pm.add_photo({
+        "name": "monstercockattack1", "source": "",
+        "position": "ghostHands", "type": "monster-cock-attack", "color": "teasing",
+        "overwrite_type": "", "overwrite_color": "", "thumbnail": False,
+    })
+    widget._rebuild_list()
+    widget._list.item(0).setSelected(True)
+
+
+def test_position_combo_is_editable(widget):
+    assert widget._cmb_position.isEditable()
+
+
+def test_type_combo_is_editable(widget):
+    assert widget._cmb_type.isEditable()
+
+
+def test_color_combo_is_editable(widget):
+    assert widget._cmb_color_special.isEditable()
+
+
+def test_custom_position_token_displayed_verbatim(widget):
+    _add_custom_photo(widget)
+    assert widget._cmb_position.currentText() == "ghostHands"
+
+
+def test_custom_type_token_displayed_verbatim(widget):
+    _add_custom_photo(widget)
+    assert widget._cmb_type.currentText() == "monster-cock-attack"
+
+
+def test_custom_color_token_displayed_verbatim(widget):
+    _add_custom_photo(widget)
+    assert widget._cmb_color_special.currentText() == "teasing"
+
+
+def test_custom_position_token_not_corrupted_by_other_combo_edits(widget):
+    """Regression: touching Type/Color must not silently reset Position to index 0."""
+    _add_custom_photo(widget)
+    widget._cmb_type.setCurrentText("plain")
+    assert widget._pm.data["photos"][0]["position"] == "ghostHands"
+
+
+def test_typing_custom_position_persists_to_photo_data(widget):
+    widget._pm.add_photo({
+        "name": "p1", "source": "", "position": "upskirt", "type": "plain",
+        "color": "white", "overwrite_type": "", "overwrite_color": "", "thumbnail": False,
+    })
+    widget._rebuild_list()
+    widget._list.item(0).setSelected(True)
+    widget._cmb_position.setCurrentText("demon")
+    assert widget._pm.data["photos"][0]["position"] == "demon"

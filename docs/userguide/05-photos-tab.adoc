@@ -67,6 +67,8 @@ Each image has:
 | Sub-type for Love Lens scenes (topless, nude, cumFace, etc.) — only visible when Position is set to `hypno`
 |===
 
+TIP: Position, Type, and Color/Special are editable drop-downs — type a custom value (e.g. a `[Special Traits]` alias token like `ghostHands` or `monster-cock-attack`) if it isn't already in the list; it's kept and exported verbatim instead of being replaced by the first list entry.
+
 Enable *Overwrite Type* or *Overwrite Color/Special* to replace the displayed label without changing the internal value.
 
 Mark *Use as Thumbnail* on exactly one image to set the pack preview icon.

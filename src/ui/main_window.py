@@ -187,7 +187,7 @@ class MainWindow(QMainWindow):
     # ── Internal ────────────────────────────────────────────────────────────
 
     def _on_game_changed(self, game: str) -> None:
-        snapshot_only = game == "snapshot"
+        snapshot_only = game in ("snapshot", "naughtynightmares")
         pack_type = self._pack_manager.get("pack_type", "photos")
         self._tabs.setTabVisible(3, snapshot_only and pack_type == "events")    # City Events
         self._tabs.setTabVisible(5, snapshot_only and pack_type == "lovelens")  # Love Lens

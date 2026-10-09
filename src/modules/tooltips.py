@@ -21,13 +21,16 @@ TIPS: dict[str, str] = {
     "pack_game": (
         "Which game this pack targets.\n"
         "• Snapshot! — sets [Mod] gameID=snapshot (accepted by all games when empty).\n"
-        "• Lewd Shores — sets [Pack] gameID=lewdshores."
+        "• Lewd Shores — sets [Pack] gameID=lewdshores.\n"
+        "• Naughty Nightmares — sets [Mod] plugID=naughtynightmares; only Photos packs\n"
+        "  are supported for this game, so Pack Type is locked to Photos."
     ),
     "pack_type": (
         "Pack content category.\n"
         "• Photos — normal collectible photo pack ([Mod] type=photos, default).\n"
         "• Events — city-event pack with dialogue JSON files ([Mod] type=events).\n"
-        "• Love Lens — adds Love Lens hypnosis content ([Hypnosis] section)."
+        "• Love Lens — adds Love Lens hypnosis content ([Hypnosis] section).\n"
+        "Naughty Nightmares packs only support Photos."
     ),
     "pack_idrange": (
         "Photo ID range reserved in the game's PhotoDictionary.\n"

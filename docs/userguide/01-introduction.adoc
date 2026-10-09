@@ -4,5 +4,6 @@ Snapshot Pack Creator is a Windows desktop application for creating and editing 
 
 * *Snapshot!*
 * *Snapshot: Lewd Shores*
+* *Snapshot! Naughty Nightmares*
 
 A full offline desktop workflow, project files, plugin support, and more.

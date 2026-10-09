@@ -1,6 +1,6 @@
 # Snapshot Pack Creator
 
-Desktop application for creating and editing bonus content packs for *Snapshot!* and *Snapshot: Lewd Shores*.
+Desktop application for creating and editing bonus content packs for *Snapshot!*, *Snapshot: Lewd Shores*, and *Snapshot! Naughty Nightmares*.
 
 Built with **Python 3.12** and **PyQt6**.
 
@@ -40,20 +40,20 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_installer.exe`.
 
 ## Features
 
-- **Pack Info tab** — pack identity (ID, title, game, type, ID range), `[Defaults]` section values, special category with colour picker and badge preview, special type/color trait aliases; Discord link for requesting a unique ID range
-- **Game-aware UI** — selecting Lewd Shores hides the Snapshot!-only tabs (City Events, Cutscenes, Love Lens) automatically; game is also detected on import from `gameID` in `pack.ini`; City Events and Love Lens are additionally hidden unless *Pack Type* on the Pack Info tab matches (`Events` / `Love Lens`), since the game only reads those ini sections for the matching pack type
+- **Pack Info tab** — pack identity (ID, title, game, type, ID range), `[Defaults]` section values, special category with colour picker and badge preview, special type/color trait aliases; Discord link for requesting a unique ID range; Position/Type/Color dropdowns are editable so custom `[Special Traits]` alias tokens (e.g. `ghostHands`) round-trip instead of being silently replaced; the Category field is always shown regardless of the selected game
+- **Game-aware UI** — three games are supported: *Snapshot!*, *Lewd Shores*, and *Naughty Nightmares*; selecting Lewd Shores or Naughty Nightmares hides the Snapshot!-only tabs (City Events, Cutscenes, Love Lens) automatically; game is also detected on import from `gameID`/`plugID` in `pack.ini` (`plugID=naughtynightmares` → Naughty Nightmares); City Events and Love Lens are additionally hidden unless *Pack Type* on the Pack Info tab matches (`Events` / `Love Lens`), since the game only reads those ini sections for the matching pack type; selecting Naughty Nightmares locks Pack Type to *Photos* (Events and Love Lens are not supported for that game)
 - **Tooltips throughout** — every field and button carries a tooltip explaining its purpose and valid values
 - Load / Save pack JSON project files
 - Import and export bonus content folders
   - **Confirm before overwrite** — *New Pack* and *Import Bonus Content* prompt for confirmation when the current pack has unsaved changes; the prompt is skipped when there is nothing to lose
   - All views are cleared immediately when a new/import action is confirmed, before any new data is loaded, so no stale data from the previous pack lingers
   - Multi-ini bundle import: merges all `.ini` files in a pack folder; strips part-number suffixes from id and title; per-part `[Special Traits]` lists are preserved and restored on export so each exported ini contains only its original trait subset
-  - `gameID` auto-detection from `[Mod]` / `[Pack]` on import
+  - `gameID`/`plugID` auto-detection from `[Mod]` / `[Pack]` on import (`plugID=naughtynightmares` → Naughty Nightmares, preserved verbatim on export)
   - `[Defaults]` and `[Events]` parsed into structured fields (not passthrough)
-  - Large-pack export: automatically splits into numbered ini files (`mypack1.ini`, `mypack2.ini`, …) of up to 100 photos each with shifted ID ranges
+  - Large-pack export: automatically splits into numbered ini files (`mypack1.ini`, `mypack2.ini`, …) of up to 100 photos each with shifted ID ranges — unless the declared ID Range is already wide enough to cover every photo, in which case the pack is kept as a single `pack.ini` with that original range (matching official multi-100 packs like `murderclub`)
   - `[Special Traits]` (and the community aliases `[Special Type]`, `[Create your own traits]`) are normalised and re-emitted on export
   - Nested pack folder layouts (e.g. `PackFolder/PackFolder/Data/`) are searched automatically
-- Photos tab — add / remove images (multi-select supported); position/type/color dropdowns; *`photoBooth`* position added; label corrections for `xBar`, `flasher`, `window`; bulk trait editing — select multiple photos with Ctrl/Shift-click and change Position, Type, Color, or Overwrite labels for all at once; display-size combobox (Standard / Large / Very Large) switches the list between compact text mode and icon-grid mode; Love Lens `hypnoType` field shown when position = `hypno`; no image cap
+- Photos tab — add / remove images (multi-select supported); position/type/color dropdowns are editable so custom alias tokens (e.g. Naughty Nightmares' `ghostHands`, `monster-cock-attack`) display and persist instead of resetting to the first entry; *`photoBooth`* position added; label corrections for `xBar`, `flasher`, `window`; bulk trait editing — select multiple photos with Ctrl/Shift-click and change Position, Type, Color, or Overwrite labels for all at once; display-size combobox (Standard / Large / Very Large) switches the list between compact text mode and icon-grid mode; Love Lens `hypnoType` field shown when position = `hypno`; no image cap
   - **AI Generate** *(optional plugin, not bundled — install separately)* — generate images via a text-to-image API; choose a position and an optional photo type (plain, kinky, nude, …), enter a character prompt, and pick from the generated results; *(any)* photo-type iterates all modifier types automatically; generated images are tagged with position and type automatically; only user-selected images are copied to the pack folder
   - Game image formats `.dat`, `.jpa`, `.pna` (renamed JPEG/PNG) are previewed and imported correctly via content sniffing; `.byte` files (renamed MP4) are detected by magic bytes and shown in an inline video player widget
 - Overwrite Texts — override displayed trait labels per image
@@ -117,7 +117,7 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_installer.exe`.
 
 | Pack Type | Game | Tab visibility |
 | --------- | ---- | --------------- |
-| Regular Photos | Snapshot! and Lewd Shores | — |
+| Regular Photos | Snapshot!, Lewd Shores, and Naughty Nightmares | — |
 | Love Lens | Snapshot! only | Love Lens tab shown only when Pack Type = Love Lens |
 | City Events | Snapshot! only | City Events tab shown only when Pack Type = Events |
 | Cutscenes | Snapshot! only | Cutscenes tab hidden (no released pack format yet) |

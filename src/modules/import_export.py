@@ -140,7 +140,7 @@ class ImportExportManager:
                 "so this content will be copied into Data\\ but will NOT be active in-game.\n"
                 "Set Pack Type to 'Events' on the Pack Info tab if you want it to work."
             )
-        if pm.get("game", "snapshot") == "snapshot" and pm.get("pack_type", "photos") == "photos":
+        if pm.get("game", "snapshot") in ("snapshot", "naughtynightmares") and pm.get("pack_type", "photos") == "photos":
             from modules.picture_widget import get_rare_photo_warning
             rare_msg = get_rare_photo_warning(pm.data)
             if rare_msg:
@@ -169,8 +169,7 @@ class ImportExportManager:
         game = pm.get("game", "snapshot")
         pack_type_val = pm.get("pack_type", "photos")
         folder_kind = "EventPack" if pack_type_val == "events" else "BonusPack"
-        game_prefix = "LewdShores" if game == "lewdshores" else "Snapshot"
-        prefix = f"{game_prefix}_{folder_kind}"
+        prefix = f"{_game_folder_prefix(game)}_{folder_kind}"
         pack_folder = os.path.join(parent_folder, f"{prefix}_{pack_id}")
         data_folder = os.path.join(pack_folder, "Data")
         os.makedirs(data_folder, exist_ok=True)
@@ -210,6 +209,19 @@ def _inject_end_events(pack_data: dict, scene_names: set) -> None:
             last.setdefault("vars", []).append({"key": "endEvent", "val": ""})
             _write_nodes(data, nodes)
             ev["content"] = _json.dumps(data)
+
+
+def _game_folder_prefix(game: str) -> str:
+    """Return the exported bonus-content folder prefix for *game*.
+
+    e.g. ``Snapshot_BonusPack_<id>``, ``LewdShores_BonusPack_<id>``, or
+    ``NaughtyNightmares_BonusPack_<id>``.
+    """
+    if game == "lewdshores":
+        return "LewdShores"
+    if game == "naughtynightmares":
+        return "NaughtyNightmares"
+    return "Snapshot"
 
 
 def _resolve_ini_paths(folder: str, parent) -> list[str]:
@@ -308,7 +320,7 @@ def _read_pack_ini(ini_path: str, folder: str) -> dict:
     cfg.read_string("".join(fixed))
     data: dict = {}
 
-    # Determine game: check [Mod] (snapshot) and [Pack] (lewdshores)
+    # Determine game: check [Mod] (snapshot / naughtynightmares, via gameID/plugID) and [Pack] (lewdshores)
     game = "snapshot"
     for _sec in ("Mod", "Pack"):
         if cfg.has_option(_sec, "gameid") or cfg.has_option(_sec, "gameID"):
@@ -317,9 +329,15 @@ def _read_pack_ini(ini_path: str, folder: str) -> dict:
             if _gid.lower() == "lewdshores":
                 game = "lewdshores"
                 break
+        if cfg.has_option(_sec, "plugid") or cfg.has_option(_sec, "plugID"):
+            _pid = (cfg.get(_sec, "plugid") if cfg.has_option(_sec, "plugid")
+                    else cfg.get(_sec, "plugID"))
+            if _pid.strip().lower() == "naughtynightmares":
+                game = "naughtynightmares"
+                break
     data["game"] = game
 
-    section = "Mod" if game == "snapshot" else "Pack"
+    section = "Pack" if game == "lewdshores" else "Mod"
     if cfg.has_option(section, "id"):
         data["id"] = cfg.get(section, "id")
     if cfg.has_option(section, "idrange"):
@@ -522,14 +540,35 @@ def _write_pack_ini(pack_folder: str, data: dict) -> None:
     except (ValueError, AttributeError):
         pass
 
-    chunks = [photos[i:i + 100] for i in range(0, max(len(photos), 1), 100)]
+    range_end: int | None = None
+    try:
+        range_end = int(id_range.split("-")[1])
+    except (ValueError, AttributeError, IndexError):
+        pass
+
+    total_photos = len(photos)
+    range_width = (range_end - range_start + 1) if (range_start is not None and range_end is not None) else None
+
+    # Preserve a single-ini / wide-idrange shape when the declared range already
+    # covers every photo (e.g. official packs that ship >100 photos under one
+    # idrange spanning multiple 100-ID slots), instead of unconditionally
+    # re-splitting into 100-photo parts and truncating the range to 100 wide.
+    preserve_single_range = (
+        range_width is not None and range_width > 100 and range_width >= max(total_photos, 1)
+    )
+    if preserve_single_range:
+        chunks = [photos]
+    else:
+        chunks = [photos[i:i + 100] for i in range(0, max(total_photos, 1), 100)]
     multi = len(chunks) > 1
 
     for part_idx, chunk in enumerate(chunks):
         part_num = part_idx + 1
         part_id = f"{pack_id}{part_num}" if multi else pack_id
         part_title = f"{title} Part {part_num}" if multi else title
-        if range_start is not None:
+        if preserve_single_range:
+            part_range = id_range
+        elif range_start is not None:
             part_start = range_start + part_idx * 100
             part_range = f"{part_start}-{part_start + 99}"
         else:
@@ -546,9 +585,10 @@ def _write_pack_ini(pack_folder: str, data: dict) -> None:
                 "",
             ]
         else:
+            plug_id = "naughtynightmares" if game == "naughtynightmares" else "snapshot"
             lines += [
                 "[Mod]",
-                "plugID=snapshot",  # BUG-4 fix: real packs use plugID, not gameID
+                f"plugID={plug_id}",  # BUG-4 fix: real packs use plugID, not gameID
                 f"id={part_id}",
                 f"idrange={part_range}",
                 f'title="{part_title}"',
@@ -630,10 +670,10 @@ def _write_pack_ini(pack_folder: str, data: dict) -> None:
             if snap_def:
                 lines += ["[Defaults]"] + snap_def + [""]
 
-        # BUG-5 fix: [Special Category] only for Snapshot!
+        # BUG-5 fix: [Special Category] only for Snapshot!/Naughty Nightmares, not Lewd Shores
         special_cat = data.get("special_category", "")
         special_color = data.get("special_category_color", "#dea3a5").lstrip("#")
-        if special_cat and game == "snapshot":
+        if special_cat and game != "lewdshores":
             lines += [
                 "[Special Category]",
                 f'specialCategory="{special_cat}"',

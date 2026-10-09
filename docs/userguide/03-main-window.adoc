@@ -7,7 +7,8 @@ The main window is divided into:
 * **Status bar** — live feedback and validation messages
 
 Tabs that are not supported by the selected game are hidden automatically.
-Choosing *Lewd Shores* on the Pack Info tab hides City Events, Cutscenes, and Love Lens.
+Choosing *Lewd Shores* or *Naughty Nightmares* on the Pack Info tab hides City Events, Cutscenes, and Love Lens.
+*Naughty Nightmares* additionally locks Pack Type to *Photos*, since Events and Love Lens packs are not supported for that game.
 The tabs reappear instantly when you switch back to *Snapshot!*.
 
 == Tabs

@@ -192,10 +192,16 @@ class PictureWidget(QWidget):
         form = QFormLayout(detail_group)
 
         self._cmb_position = QComboBox()
+        self._cmb_position.setEditable(True)
+        self._cmb_position.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         set_tip(self._cmb_position, "photo_position")
         self._cmb_type = QComboBox()
+        self._cmb_type.setEditable(True)
+        self._cmb_type.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         set_tip(self._cmb_type, "photo_type")
         self._cmb_color_special = QComboBox()
+        self._cmb_color_special.setEditable(True)
+        self._cmb_color_special.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         set_tip(self._cmb_color_special, "photo_color")
 
         self._chk_overwrite_type = QCheckBox("Overwrite Type")
@@ -227,10 +233,13 @@ class PictureWidget(QWidget):
         self._lbl_multi.setVisible(False)
         form.addRow("", self._lbl_multi)
 
-        self._cmb_position.currentIndexChanged.connect(self._on_position_changed)
-        self._cmb_position.currentIndexChanged.connect(self._on_trait_changed)
-        self._cmb_type.currentIndexChanged.connect(self._on_trait_changed)
-        self._cmb_color_special.currentIndexChanged.connect(self._on_trait_changed)
+        # currentTextChanged (not currentIndexChanged) so typed custom tokens
+        # (not in the predefined list, e.g. a Naughty Nightmares alias like
+        # "ghostHands") also persist, not just dropdown picks.
+        self._cmb_position.currentTextChanged.connect(self._on_position_changed)
+        self._cmb_position.currentTextChanged.connect(self._on_trait_changed)
+        self._cmb_type.currentTextChanged.connect(self._on_trait_changed)
+        self._cmb_color_special.currentTextChanged.connect(self._on_trait_changed)
         self._cmb_hypno_type.currentIndexChanged.connect(self._on_trait_changed)
         self._chk_overwrite_type.toggled.connect(self._on_trait_changed)
         self._edit_overwrite_type.textChanged.connect(self._on_trait_changed)
@@ -389,10 +398,19 @@ class PictureWidget(QWidget):
     def _on_position_changed(self) -> None:
         """Show/hide hypnoType row based on whether position==hypno."""
         positions = self._current_positions()
-        idx = self._cmb_position.currentIndex()
-        is_hypno = (0 <= idx < len(positions) and positions[idx][0] == "hypno")
+        is_hypno = self._resolve_position_value(positions) == "hypno"
         self._lbl_hypno_type.setVisible(is_hypno)
         self._cmb_hypno_type.setVisible(is_hypno)
+
+    def _resolve_position_value(self, positions) -> str | None:
+        """Map the Position combo's current display text back to its internal
+        value, matching against the known (value, label) list. Falls back to
+        the raw typed text when it's a custom token not in the list — looking
+        this up by text (not currentIndex()) because setCurrentText()/typed
+        edits on an editable combo don't reliably update currentIndex()."""
+        cur_text = self._cmb_position.currentText().strip()
+        match = next((v for v, label in positions if label == cur_text), None)
+        return match if match is not None else (cur_text or None)
 
     def _on_trait_changed(self) -> None:
         selected_rows = [self._list.row(item) for item in self._list.selectedItems()]
@@ -401,16 +419,10 @@ class PictureWidget(QWidget):
             return
 
         positions = self._current_positions()
-        pos_idx = self._cmb_position.currentIndex()
-        new_pos = positions[pos_idx][0] if 0 <= pos_idx < len(positions) else None
+        new_pos = self._resolve_position_value(positions)
 
-        types = self._current_types()
-        t_idx = self._cmb_type.currentIndex()
-        new_type = types[t_idx] if 0 <= t_idx < len(types) else None
-
-        specials = self._current_specials()
-        s_idx = self._cmb_color_special.currentIndex()
-        new_special = specials[s_idx] if 0 <= s_idx < len(specials) else None
+        new_type = self._cmb_type.currentText().strip() or None
+        new_special = self._cmb_color_special.currentText().strip() or None
 
         ht = self._cmb_hypno_type.currentText()
         ow_type = self._edit_overwrite_type.text() if self._chk_overwrite_type.isChecked() else ""
@@ -461,22 +473,36 @@ class PictureWidget(QWidget):
         for val, label in positions:
             self._cmb_position.addItem(label, val)
         cur_pos = photo.get("position", "upskirt")
-        idx = next((i for i, (v, _) in enumerate(positions) if v == cur_pos), 0)
-        self._cmb_position.setCurrentIndex(idx)
+        idx = next((i for i, (v, _) in enumerate(positions) if v == cur_pos), -1)
+        if idx >= 0:
+            self._cmb_position.setCurrentIndex(idx)
+        else:
+            # Custom token not in the predefined list — show it verbatim via the
+            # editable line-edit instead of silently falling back to index 0.
+            self._cmb_position.setCurrentIndex(-1)
+            self._cmb_position.setEditText(cur_pos)
 
         self._cmb_type.clear()
         for t in types:
             self._cmb_type.addItem(t)
         cur_type = photo.get("type", "plain")
-        t_idx = types.index(cur_type) if cur_type in types else 0
-        self._cmb_type.setCurrentIndex(t_idx)
+        t_idx = types.index(cur_type) if cur_type in types else -1
+        if t_idx >= 0:
+            self._cmb_type.setCurrentIndex(t_idx)
+        else:
+            self._cmb_type.setCurrentIndex(-1)
+            self._cmb_type.setEditText(cur_type)
 
         self._cmb_color_special.clear()
         for s in specials:
             self._cmb_color_special.addItem(s)
         cur_special = photo.get("color", specials[0])
-        s_idx = specials.index(cur_special) if cur_special in specials else 0
-        self._cmb_color_special.setCurrentIndex(s_idx)
+        s_idx = specials.index(cur_special) if cur_special in specials else -1
+        if s_idx >= 0:
+            self._cmb_color_special.setCurrentIndex(s_idx)
+        else:
+            self._cmb_color_special.setCurrentIndex(-1)
+            self._cmb_color_special.setEditText(cur_special)
 
         ow_type = photo.get("overwrite_type", "")
         self._chk_overwrite_type.setChecked(bool(ow_type))

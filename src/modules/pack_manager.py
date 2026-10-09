@@ -49,7 +49,7 @@ class _DirtyDict(dict):
 # Default in-memory pack structure
 _EMPTY_PACK: dict[str, Any] = {
     "version": 1,
-    "game": "snapshot",          # "snapshot" | "lewdshores"
+    "game": "snapshot",          # "snapshot" | "lewdshores" | "naughtynightmares"
     "pack_type": "photos",       # "photos" | "lovelens" | "events"
     "title": "",
     "id": "",
