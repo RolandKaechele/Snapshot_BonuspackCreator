@@ -60,6 +60,7 @@ PHOTO_TYPES = [
     ("leaning_cum_butt", "Photo – Leaning with cum on butt"),
     ("leaning_cum_vagina", "Photo – Leaning with cum in vagina"),
     ("leaning_cum_anus", "Photo – Leaning with cum in anus"),
+    ("double_shot", "Photo – Double Shot (optional)"),
 ]
 
 

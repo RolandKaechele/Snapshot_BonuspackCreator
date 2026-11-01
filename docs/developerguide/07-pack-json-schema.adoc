@@ -13,7 +13,7 @@ All keys that appear in `PackManager._EMPTY_PACK` are guaranteed to be present a
 
 | `game`
 | `str`
-| `"snapshot"` or `"lewdshores"`
+| `"snapshot"`, `"lewdshores"`, or `"naughtynightmares"`
 
 | `pack_type`
 | `str`

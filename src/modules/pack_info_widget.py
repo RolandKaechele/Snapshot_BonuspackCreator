@@ -14,6 +14,9 @@ from PyQt6.QtCore import Qt, QUrl, pyqtSignal  # type: ignore
 from app_debug import dlog as _dlog
 from modules.tooltips import set_tip
 from modules.photo_registry import default_registry_path, load_registry, compute_photo_ids, find_conflicts
+from modules.picture_widget import (
+    NAUGHTY_NIGHTMARES_POSITIONS, NAUGHTY_NIGHTMARES_TYPES, NAUGHTY_NIGHTMARES_COLORS,
+)
 from ui.dialogs import show_info, show_warning
 
 if TYPE_CHECKING:
@@ -52,6 +55,13 @@ _LS_SPECIALS = [
     "nipple view", "nipple exposed", "plug", "wet fabric", "kinky",
     "pussy exposed", "pussy view", "insert finger", "grabbing",
 ]
+
+# Naughty Nightmares-specific value lists — a distinct, horror-themed vocabulary,
+# not the base Snapshot! list with extras appended (see picture_widget.py's
+# NAUGHTY_NIGHTMARES_POSITIONS/_TYPES/_COLORS for sourcing notes).
+_NN_POSITIONS = [val for val, _label in NAUGHTY_NIGHTMARES_POSITIONS]
+_NN_TYPES = NAUGHTY_NIGHTMARES_TYPES
+_NN_COLORS = NAUGHTY_NIGHTMARES_COLORS
 
 _DISCORD_URL = "https://discord.com/invite/KtRr4WSyks"
 
@@ -411,6 +421,8 @@ class PackInfoWidget(QWidget):
         is_snap = game in ("snapshot", "naughtynightmares")
         is_ls = game == "lewdshores"
 
+        self._sync_snapshot_defaults_combos(game)
+
         # Defaults tab rows
         self._form_defaults.setRowVisible(self._cmb_def_pos, is_snap)
         self._form_defaults.setRowVisible(self._cmb_def_type, is_snap)
@@ -439,6 +451,25 @@ class PackInfoWidget(QWidget):
             self._grp_special_traits.setTitle("[Create your own traits] \u2014 Custom type/special aliases")
             self._grp_type_aliases.setTitle("newType aliases")
             self._grp_color_aliases.setTitle("newSpecial aliases")
+
+    def _sync_snapshot_defaults_combos(self, game: str) -> None:
+        """Swap the Default Position/Type/Color combo items for Naughty Nightmares'
+        own suggested vocabulary instead of reusing the base Snapshot! lists —
+        preserving the currently-typed value, since these combos are editable."""
+        positions = _NN_POSITIONS if game == "naughtynightmares" else _POSITIONS
+        types = _NN_TYPES if game == "naughtynightmares" else _TYPES
+        colors = _NN_COLORS if game == "naughtynightmares" else _COLORS
+        for cmb, items in (
+            (self._cmb_def_pos, positions),
+            (self._cmb_def_type, types),
+            (self._cmb_def_color, colors),
+        ):
+            current = cmb.currentText()
+            cmb.blockSignals(True)
+            cmb.clear()
+            cmb.addItems(items)
+            cmb.setEditText(current)
+            cmb.blockSignals(False)
 
     def _sync_pack_type_combo(self, game: str) -> None:
         """Rebuild the Pack Type combo's choices for the given game.

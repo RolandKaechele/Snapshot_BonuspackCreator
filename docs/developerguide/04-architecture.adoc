@@ -67,10 +67,10 @@ Call `set_tip(widget, key)` to attach a tooltip — this keeps tooltip text out 
 | Central `TIPS` registry; `set_tip(widget, key)` helper
 
 | `modules/picture_widget.py`
-| `PictureWidget` — photo list with `ExtendedSelection` (Ctrl/Shift-click multi-select); display-size combobox (Standard 48 px / Large 80 px / Very Large 120 px icon mode); per-image trait dropdowns; `hypnoType` for hypno position; thumbnail preview; bulk trait editing applies to all selected rows
+| `PictureWidget` — photo list with `ExtendedSelection` (Ctrl/Shift-click multi-select); display-size combobox (Standard 48 px / Large 80 px / Very Large 120 px icon mode); per-image trait dropdowns (`_current_positions()`/`_current_types()`/`_current_specials()` branch on `game`, with `NAUGHTY_NIGHTMARES_POSITIONS`/`_TYPES`/`_COLORS` used for that game instead of the base Snapshot! lists); `hypnoType` for hypno position; thumbnail preview; bulk trait editing applies to all selected rows; `_add_image_paths(..., auto_detect_position=True)` preselects Position from a `<value>_` filename prefix via `_detect_position_from_filename()`; *Naming Conventions…* toolbar button shows the current game's prefix → label mapping
 
 | `modules/overwrite_texts.py`
-| `OverwriteTextsWidget` — category label and Love Lens dialog texts
+| `OverwriteTextsWidget` — key/value editor for the `[Hypnosis Text]` section; key list hides `key.tag` lines and instead shows them as a paired "Speaker" field for the selected key, backed by `_DEFAULT_SPEAKER_TAGS`
 
 | `modules/image_utils.py`
 | `load_pixmap(path)` — content-sniffing image loader; `resolve_asset(name, folder)` — searches `Data/` then pack root; `ASSET_FILTER` file-dialog filter string
@@ -88,7 +88,7 @@ Call `set_tip(widget, key)` to attach a tooltip — this keeps tooltip text out 
 | `CutsceneWidget` — compact sequence list; tabbed Preview and Metadata panels
 
 | `modules/love_lens.py`
-| `LoveLensWidget` — tabbed Character Setup / 2D Overlay Slots / Texture Slots / Result Photos
+| `LoveLensWidget` — tabbed Character Setup / 2D Overlay Slots / Texture Slots / Result Photos; `PHOTO_TYPES` includes the optional `double_shot` slot (skipped by `get_missing_love_lens_elements()`, same `(optional)`-label convention as `droppedClothTexture`)
 
 | `modules/plugin_system.py`
 | `PluginSystem` — discovers and imports plugins from `plugins/`

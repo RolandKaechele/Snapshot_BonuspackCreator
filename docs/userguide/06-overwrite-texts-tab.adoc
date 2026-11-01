@@ -1,10 +1,14 @@
 == Overwrite Texts Tab
 
-=== Special Category / Pack Theme
-
-Set the display label and bubble color shown in-game for the pack theme (called *Special Category* in Snapshot! and *Pack Theme* in Lewd Shores).
-
 === Love Lens Dialog Texts
 
-Override the dialog lines shown during the Love Lens sequence.
-Leave fields blank to use the game's built-in default text.
+This tab is a key/value editor for the `[Hypnosis Text]` dialogue section.
+Click *Add…* and enter a key (e.g. `hypno_start_mod.0`), then select it in the list to edit its text.
+Leave an entry's text blank — or don't add the key at all — to use the game's built-in default text.
+
+=== Speaker Field
+
+Selecting a text key shows a paired *Speaker* field (backed by a `key.tag=` line in the ini).
+Enter a character name to attribute the line to them, or leave it empty for narration.
+Some keys (e.g. `hypno_start_mod.4`) are pre-filled with a sensible default speaker name the first time they're added.
+

@@ -31,6 +31,7 @@ TIP: Click *🎮 Get ID on Discord* to open the Snapshot! Discord server and req
 
 Sets the fallback position, type, and color that the game uses for photos that do not specify their own values (`[Defaults]` section of `pack.ini`).
 The Position/Type/Color dropdowns are editable — type a custom value (e.g. a `[Special Traits]` alias token like `ghostHands`) if it isn't in the list; it's kept and exported verbatim.
+When Game is set to *Naughty Nightmares*, these dropdowns switch to that game's own suggested Position/Type/Color vocabulary (e.g. `ghostHands`, `demon`, `werewolves`) instead of the base Snapshot! lists — still fully editable either way.
 The Category field is always shown, regardless of the selected Game.
 
 === Category & Traits

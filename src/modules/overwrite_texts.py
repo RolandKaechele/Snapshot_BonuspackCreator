@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import (  # type: ignore
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QListWidget, QPlainTextEdit, QSplitter, QInputDialog,
+    QListWidget, QPlainTextEdit, QSplitter, QInputDialog, QLineEdit,
 )
 from PyQt6.QtCore import Qt  # type: ignore
 
@@ -16,9 +16,16 @@ if TYPE_CHECKING:
 _SECTION_HEADER = "[Hypnosis Text]"
 _SECTION_KEY = _SECTION_HEADER.lower()
 
+# Default speaker name for a key's paired `key.tag=` field, ported from the
+# V2.8 browser prototype's hypnosisDefaultTextOverrides map (its only entry
+# with a non-empty default tag).
+_DEFAULT_SPEAKER_TAGS = {
+    "hypno_start_mod.4": "Woman",
+}
+
 
 class OverwriteTextsWidget(QWidget):
-    """Two-panel editor: key list left, value text box right."""
+    """Two-panel editor: key list left, value text + speaker tag right."""
 
     def __init__(self, pack_manager: "PackManager") -> None:
         super().__init__()
@@ -26,6 +33,9 @@ class OverwriteTextsWidget(QWidget):
         self._entries: list[tuple[str, str]] = []
         self._loading = False
         self._build_ui()
+
+    def _entry_index(self, key: str) -> int:
+        return next((i for i, (k, _) in enumerate(self._entries) if k == key), -1)
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -67,6 +77,17 @@ class OverwriteTextsWidget(QWidget):
         right = QWidget()
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(4, 0, 0, 0)
+
+        speaker_row = QHBoxLayout()
+        speaker_row.setContentsMargins(0, 0, 0, 0)
+        speaker_row.addWidget(QLabel("Speaker:"))
+        self._tag_edit = QLineEdit()
+        self._tag_edit.setPlaceholderText("(empty for narration)")
+        self._tag_edit.setEnabled(False)
+        self._tag_edit.textChanged.connect(self._on_tag_changed)
+        speaker_row.addWidget(self._tag_edit, 1)
+        right_layout.addLayout(speaker_row)
+
         self._value_edit = QPlainTextEdit()
         self._value_edit.setPlaceholderText("Select a key to edit its text…")
         self._value_edit.setEnabled(False)
@@ -80,39 +101,78 @@ class OverwriteTextsWidget(QWidget):
             return
         key = key.strip()
         self._entries.append((key, ""))
-        self._key_list.addItem(key)
+        if not key.endswith(".tag"):
+            default_tag = _DEFAULT_SPEAKER_TAGS.get(key)
+            if default_tag and self._entry_index(f"{key}.tag") < 0:
+                self._entries.append((f"{key}.tag", default_tag))
+            self._key_list.addItem(key)
+            self._key_list.setCurrentRow(self._key_list.count() - 1)
         self._lbl_count.setText(f"{len(self._entries)} entries")
-        self._key_list.setCurrentRow(len(self._entries) - 1)
         self._save()
 
     def _on_remove(self) -> None:
         row = self._key_list.currentRow()
         if row < 0:
             return
-        self._entries.pop(row)
+        key = self._key_list.item(row).text()
+        for lookup in (key, f"{key}.tag"):
+            idx = self._entry_index(lookup)
+            if idx >= 0:
+                self._entries.pop(idx)
         self._key_list.takeItem(row)
         self._lbl_count.setText(f"{len(self._entries)} entries")
         self._value_edit.clear()
+        self._tag_edit.clear()
         self._save()
 
     def _on_key_selected(self, row: int) -> None:
         self._loading = True
-        if 0 <= row < len(self._entries):
-            self._value_edit.setPlainText(self._entries[row][1])
+        if row >= 0 and row < self._key_list.count():
+            key = self._key_list.item(row).text()
+            idx = self._entry_index(key)
+            self._value_edit.setPlainText(self._entries[idx][1] if idx >= 0 else "")
             self._value_edit.setEnabled(True)
+            tag_idx = self._entry_index(f"{key}.tag")
+            self._tag_edit.setText(self._entries[tag_idx][1] if tag_idx >= 0 else "")
+            self._tag_edit.setEnabled(True)
         else:
             self._value_edit.clear()
             self._value_edit.setEnabled(False)
+            self._tag_edit.clear()
+            self._tag_edit.setEnabled(False)
         self._loading = False
 
     def _on_value_changed(self) -> None:
         if self._loading:
             return
         row = self._key_list.currentRow()
-        if 0 <= row < len(self._entries):
-            key = self._entries[row][0]
-            self._entries[row] = (key, self._value_edit.toPlainText())
+        if row < 0:
+            return
+        key = self._key_list.item(row).text()
+        idx = self._entry_index(key)
+        if idx >= 0:
+            self._entries[idx] = (key, self._value_edit.toPlainText())
             self._save()
+
+    def _on_tag_changed(self, text: str) -> None:
+        if self._loading:
+            return
+        row = self._key_list.currentRow()
+        if row < 0:
+            return
+        key = self._key_list.item(row).text()
+        tag_key = f"{key}.tag"
+        idx = self._entry_index(tag_key)
+        text = text.strip()
+        if text:
+            if idx >= 0:
+                self._entries[idx] = (tag_key, text)
+            else:
+                self._entries.append((tag_key, text))
+        elif idx >= 0:
+            self._entries.pop(idx)
+        self._lbl_count.setText(f"{len(self._entries)} entries")
+        self._save()
 
     def _save(self) -> None:
         lines = [f"{k}={v}\n" for k, v in self._entries if k]
@@ -134,6 +194,8 @@ class OverwriteTextsWidget(QWidget):
         self._key_list.clear()
         self._value_edit.clear()
         self._value_edit.setEnabled(False)
+        self._tag_edit.clear()
+        self._tag_edit.setEnabled(False)
 
         pt = self._pm.data.get("passthrough_sections", [])
         for h, content_lines in pt:
@@ -144,8 +206,10 @@ class OverwriteTextsWidget(QWidget):
                         continue
                     if "=" in s:
                         k, _, v = s.partition("=")
-                        self._entries.append((k.strip(), v.strip()))
-                        self._key_list.addItem(k.strip())
+                        k = k.strip()
+                        self._entries.append((k, v.strip()))
+                        if not k.endswith(".tag"):
+                            self._key_list.addItem(k)
                 break
 
         self._lbl_count.setText(f"{len(self._entries)} entries")

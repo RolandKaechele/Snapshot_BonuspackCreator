@@ -20,6 +20,6 @@ Same as overlays but some slots (bra, panty, dropped bra) accept multiple images
 === Result Photos
 
 Assign one 1024 × 1024 result photo for each Love Lens scene type.
-A complete Love Lens pack needs a photo for every type.
+A complete Love Lens pack needs a photo for every type, except slots labeled *(optional)* (currently `Double Shot`), which may be left empty.
 
 TIP: Double-click any overlay or texture preview to open a full-resolution viewer where you can zoom in/out and open the file in the system default editor.

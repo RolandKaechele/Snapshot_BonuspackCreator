@@ -100,6 +100,39 @@ LEWD_SPECIALS = [
     "pussy view", "insert finger", "grabbing",
 ]
 
+# Naughty Nightmares-specific suggested Position/Type/Color lists — a distinct,
+# horror-themed vocabulary, not the base Snapshot! list with extras appended.
+# Positions confirmed via binary string-literal extraction (see
+# docs/NaughtyNightmares_BonusPack_Analysis.md §8.2.1); types/colors merged from
+# the same confirmed fallback values plus the V2.7 browser prototype's `ssnm`
+# suggested combo lists (see docs/ArchiveFeatureComparison.md § "Cross-reference:
+# ssnm suggested Position/Type/Color lists"). Combos stay editable either way.
+NAUGHTY_NIGHTMARES_POSITIONS = [
+    ("ghostHands", "Ghost Hands"), ("demon", "Demon"), ("psycho", "Psycho"),
+    ("bench", "Bench Photo"), ("jogger", "Jogger Photo"), ("xray", "X-Ray"),
+    ("flasher", "Flasher"), ("window", "Window"), ("angry", "Busted Photo"),
+    ("police", "Police"), ("rJogger", "Signal Hijacker Jogger"),
+    ("hypno", "Love Lens Photo"), ("boss", "Boss"), ("ritual", "Ritual"),
+    ("tentacles", "Tentacles"),
+]
+
+NAUGHTY_NIGHTMARES_TYPES = [
+    "plain", "stripes", "dots", "nude", "kinky", "cum", "doll", "grabButt",
+    "cultists", "horrorgirl", "mummy", "geisha", "goblin", "goblinqueen",
+    "nurse", "vampires", "werewolves", "zombies", "sleepwalker", "witch",
+    "demon", "slimegirl", "tentacle", "elf", "succubi", "goth", "nakedPsycho",
+    "sleepwalkerBench", "grabBoob", "grabCrutch", "penetrate", "shorts",
+    "panty", "sex", "pussyview", "mastubrate", "dildo", "frill", "topless",
+    "flashing", "piercing", "plug", "plugcosplayer", "kimono", "front",
+    "back", "cumAnal", "cumButt", "cumVag", "cumFace", "cumMouth",
+    "doubleShot", "none",
+]
+
+NAUGHTY_NIGHTMARES_COLORS = [
+    "pink", "white", "turquoise", "green", "normal", "slim", "busty",
+    "police", "wet", "blue", "black", "rare", "nipple", "brown", "none",
+]
+
 OVERLAY_SLOTS = [
     ("overlayStart", "Overlay – Start"),
     ("overlayBoob", "Overlay – Grabbing Breasts"),
@@ -155,6 +188,9 @@ class PictureWidget(QWidget):
         self._btn_ai = QPushButton("AI Generate…")
         self._btn_ai.setFixedWidth(100)
         self._btn_ai.clicked.connect(self._on_ai_generate)
+        self._btn_naming_help = QPushButton("Naming Conventions…")
+        self._btn_naming_help.setFixedWidth(150)
+        self._btn_naming_help.clicked.connect(self._on_show_naming_conventions)
         self._lbl_count = QLabel("0 images")
         self._cmb_display_size = QComboBox()
         for label, _ in _DISPLAY_SIZES:
@@ -163,6 +199,7 @@ class PictureWidget(QWidget):
         toolbar.addWidget(self._btn_add)
         toolbar.addWidget(self._btn_remove)
         toolbar.addWidget(self._btn_ai)
+        toolbar.addWidget(self._btn_naming_help)
         toolbar.addStretch()
         toolbar.addWidget(QLabel("Size:"))
         toolbar.addWidget(self._cmb_display_size)
@@ -275,7 +312,21 @@ class PictureWidget(QWidget):
         )
         if not paths:
             return
-        self._add_image_paths(paths)
+        self._add_image_paths(paths, auto_detect_position=True)
+
+    def _on_show_naming_conventions(self) -> None:
+        from ui.dialogs import show_info
+        lines = [
+            f"{val}_...  ->  {label}"
+            for val, label in self._current_positions()
+        ]
+        show_info(
+            self, "Position Filename Naming Conventions",
+            "Name a photo file starting with one of these prefixes (case-insensitive, "
+            "followed by an underscore) to auto-preselect its Position when added:\n\n"
+            + "\n".join(lines),
+            tag="PictureWidget._on_show_naming_conventions",
+        )
 
     def _on_ai_generate(self) -> None:
         game = self._pm.get("game")
@@ -322,8 +373,18 @@ class PictureWidget(QWidget):
                     item.setSelected(True)
             self._list.setCurrentRow(first_new)
 
+    def _detect_position_from_filename(self, path: str) -> str | None:
+        """Match a `<position_value>_` filename prefix (case-insensitive) against
+        the current game's position list, e.g. `upskirt_00010.png` -> "upskirt"."""
+        name = os.path.basename(path).lower()
+        for val, _label in self._current_positions():
+            if name.startswith(f"{val.lower()}_"):
+                return val
+        return None
+
     def _add_image_paths(self, paths: list, position: str = "upskirt",
-                         photo_type: str = "plain") -> None:
+                         photo_type: str = "plain",
+                         auto_detect_position: bool = False) -> None:
         existing_sources = {p.get("source") for p in self._pm.data.get("photos", [])}
         for path in paths:
             if path in existing_sources:
@@ -331,10 +392,13 @@ class PictureWidget(QWidget):
             photos: list = self._pm.data.setdefault("photos", [])
             pack_id = self._pm.get("id") or "photo"
             name = f"{pack_id}{len(photos) + 1}"
+            pos = position
+            if auto_detect_position:
+                pos = self._detect_position_from_filename(path) or position
             photos.append({
                 "name": name,
                 "source": path,
-                "position": position,
+                "position": pos,
                 "type": photo_type,
                 "color": "white",
                 "overwrite_type": "",
@@ -458,13 +522,28 @@ class PictureWidget(QWidget):
     # ── Helpers ───────────────────────────────────────────────────────────
 
     def _current_positions(self):
-        return LEWD_POSITIONS if self._pm.get("game") == "lewdshores" else SNAPSHOT_POSITIONS
+        game = self._pm.get("game")
+        if game == "lewdshores":
+            return LEWD_POSITIONS
+        if game == "naughtynightmares":
+            return NAUGHTY_NIGHTMARES_POSITIONS
+        return SNAPSHOT_POSITIONS
 
     def _current_types(self):
-        return LEWD_TYPES if self._pm.get("game") == "lewdshores" else SNAPSHOT_TYPES
+        game = self._pm.get("game")
+        if game == "lewdshores":
+            return LEWD_TYPES
+        if game == "naughtynightmares":
+            return NAUGHTY_NIGHTMARES_TYPES
+        return SNAPSHOT_TYPES
 
     def _current_specials(self):
-        return LEWD_SPECIALS if self._pm.get("game") == "lewdshores" else SNAPSHOT_COLORS
+        game = self._pm.get("game")
+        if game == "lewdshores":
+            return LEWD_SPECIALS
+        if game == "naughtynightmares":
+            return NAUGHTY_NIGHTMARES_COLORS
+        return SNAPSHOT_COLORS
 
     def _load_detail(self, photo: dict) -> None:
         positions = self._current_positions()
