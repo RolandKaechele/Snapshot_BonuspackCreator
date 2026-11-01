@@ -88,6 +88,12 @@ should be accepted and ignored (`**_ignored`). Backends with
 generated images per prompt — used by the dialog's "vary guidance scale
 across generated images" comparison checkbox).
 
+Local (torch-based) backends should detect their device at runtime rather
+than assume a GPU is present — e.g. `torch.cuda.is_available()` — and fall
+back to `"cpu"` automatically, same as the app's own venv/frozen-build torch
+install (CUDA 12.8 when an NVIDIA GPU is detected, CPU-only otherwise). See
+each reference plugin's `_get_local_device()` helper.
+
 When no backend plugin registers itself as available, the *AI Generate…*
 buttons in Photos, Love Lens, and City Events are hidden automatically.
 See `plugins/perchance_diffusion` (online, no dependencies),

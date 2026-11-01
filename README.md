@@ -36,7 +36,7 @@ Then build:
 venv\Scripts\python.exe -m scons
 ```
 
-Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_installer.exe`.
+Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_cu128_installer.exe`. The frozen app bundles CUDA 12.8 torch and falls back to CPU automatically at runtime when no NVIDIA GPU is present, so a separate CPU-only build is not needed (`scons torch=cpu` remains available if one is ever wanted).
 
 ## Features
 

@@ -34,15 +34,23 @@ This executes the `SConstruct` script in the project root and produces:
 |===
 | Artefact | Description
 
-| `dist/SnapshotPackCreator/`
-| Frozen one-directory bundle (PyInstaller)
+| `dist/SnapshotPackCreator_cu128/`
+| Frozen one-directory bundle (PyInstaller), CUDA 12.8 torch
 
-| `dist/SnapshotPackCreator/docs/*.pdf`
+| `dist/SnapshotPackCreator_cu128/docs/*.pdf`
 | User guide, Developer guide, Plugin Developer guide as PDF
 
-| `dist/SnapshotPackCreator_vYYYY-MM-DD_installer.exe`
+| `dist/SnapshotPackCreator_vYYYY-MM-DD_cu128_installer.exe`
 | Console SFX installer (no UAC, self-extracting via 7zCon.sfx)
 |===
+
+`scons` builds the `cu128` variant by default — the app falls back to CPU automatically at runtime when no NVIDIA GPU is present (see `_get_local_device()` in each diffusion backend plugin), so a separate CPU-only frozen build isn't needed. Pass `torch=cpu` to build a CPU-only variant instead, or `torch=all` to build both:
+
+[source,bat]
+----
+venv\Scripts\python.exe -m scons torch=cpu
+venv\Scripts\python.exe -m scons torch=all
+----
 
 To clean all build artefacts:
 

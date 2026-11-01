@@ -10,9 +10,10 @@
 #
 # Torch variants
 # --------------
-#   cpu   — CPU-only (any machine)
-#   cu121 — CUDA 12.1 (most NVIDIA GPUs)
-#   cu128 — CUDA 12.8 (RTX 5080 / Blackwell sm_120)
+#   cu128 — CUDA 12.8 (default frozen build; falls back to CPU automatically
+#           at runtime when no NVIDIA GPU is present, so no separate CPU-only
+#           frozen build is needed)
+#   cpu   — CPU-only, built only if explicitly requested
 #
 # Prerequisites
 # -------------
@@ -26,10 +27,9 @@
 #
 # Usage
 # -----
-#   scons                # build all three torch variants
-#   scons torch=cpu      # build CPU-only variant only
-#   scons torch=cu121    # build CUDA 12.1 variant only
-#   scons torch=cu128    # build CUDA 12.8 variant only
+#   scons                # build the cu128 frozen app (default)
+#   scons torch=cpu      # build a CPU-only frozen app instead (rarely needed)
+#   scons torch=all      # build both variants
 #   scons -c             # clean dist/ and build/ artefacts
 
 import datetime
@@ -46,18 +46,17 @@ BUILD_VERSION = _now.strftime("v%Y-%m-%d")
 # -- Torch variants ------------------------------------------------------------
 TORCH_VARIANTS = {
     "cpu":   "https://download.pytorch.org/whl/cpu",
-    "cu121": "https://download.pytorch.org/whl/cu121",
     "cu128": "https://download.pytorch.org/whl/cu128",
 }
 
-# scons torch=cpu|cu121|cu128  selects a single variant; default builds all.
-_torch_arg = ARGUMENTS.get("torch", "all")  # type: ignore[name-defined]
+# scons torch=cpu|cu128|all  selects the variant(s) to build; default is cu128 only.
+_torch_arg = ARGUMENTS.get("torch", "cu128")  # type: ignore[name-defined]
 if _torch_arg == "all":
     _build_variants = list(TORCH_VARIANTS.keys())
 elif _torch_arg in TORCH_VARIANTS:
     _build_variants = [_torch_arg]
 else:
-    print(f"ERROR: torch={_torch_arg!r} unknown. Valid choices: {', '.join(TORCH_VARIANTS)}")
+    print(f"ERROR: torch={_torch_arg!r} unknown. Valid choices: {', '.join(TORCH_VARIANTS)}, all")
     Exit(1)  # type: ignore[name-defined]
 
 # -- Configuration -------------------------------------------------------------
@@ -485,12 +484,9 @@ def _restore_dev_torch(target, source, env):
     except Exception:
         pass
 
-    if "RTX 5080" in gpu_name:
+    if "NVIDIA" in gpu_name:
         index_url = TORCH_VARIANTS["cu128"]
-        label = "cu128 (RTX 5080)"
-    elif "NVIDIA" in gpu_name:
-        index_url = TORCH_VARIANTS["cu121"]
-        label = f"cu121 ({gpu_name.strip()})"
+        label = f"cu128 ({gpu_name.strip()})"
     else:
         index_url = TORCH_VARIANTS["cpu"]
         label = "cpu-only"

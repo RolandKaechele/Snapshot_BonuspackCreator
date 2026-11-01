@@ -29,8 +29,8 @@ echo Creating virtual environment at %VENV_DIR% ...
 
 
 REM ── Install torch with the correct backend for the detected GPU ──────────────
-REM   RTX 5080 (Blackwell / sm_120) requires CUDA 12.8.
-REM   Other NVIDIA cards use CUDA 12.1.  Everything else gets the CPU-only wheel.
+REM   Only CUDA 12.8 is supported. Any detected NVIDIA GPU gets the cu128 wheel;
+REM   no GPU (or torch can't find one) falls back to the CPU-only wheel.
 REM nvidia-smi is authoritative for NVIDIA; CIM may return virtual adapters first
 set GPU_NAME=
 where nvidia-smi >nul 2>&1
@@ -49,19 +49,12 @@ if not defined GPU_NAME (
 )
 
 set TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
-REM RTX 50xx = Blackwell, requires CUDA 12.8
-echo !GPU_NAME! | findstr /I "RTX 50" >nul 2>&1
+echo !GPU_NAME! | findstr /I "NVIDIA" >nul 2>&1
 if not errorlevel 1 (
     set TORCH_INDEX_URL=https://download.pytorch.org/whl/cu128
-    echo Detected Blackwell GPU -- installing torch with CUDA 12.8
+    echo Detected NVIDIA GPU -- installing torch with CUDA 12.8
 ) else (
-    echo !GPU_NAME! | findstr /I "NVIDIA" >nul 2>&1
-    if not errorlevel 1 (
-        set TORCH_INDEX_URL=https://download.pytorch.org/whl/cu121
-        echo Detected NVIDIA GPU -- installing torch with CUDA 12.1
-    ) else (
-        echo No NVIDIA GPU detected -- installing CPU-only torch
-    )
+    echo No NVIDIA GPU detected -- installing CPU-only torch
 )
 
 set TORCH_HASH_FILE=%VENV_DIR%\.torch.hash

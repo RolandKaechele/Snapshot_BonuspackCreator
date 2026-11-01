@@ -4,6 +4,7 @@
 
 * Windows 10 or later
 * No Python or Java installation required — a portable Python runtime is bundled in `temp\`
+* Optional: an NVIDIA GPU for faster *AI Generate…* image generation with local diffusion plugins (CUDA 12.8). Without one, those plugins fall back to CPU automatically — no extra setup needed.
 
 === First Run
 
