@@ -143,4 +143,16 @@ Images are identified by content (byte sniffing), not by file extension.
 | `hypnoType`
 | `str`
 | Love Lens scene sub-type (e.g. `"topless"`, `"nude"`); only written to ini when position is `hypno`
+
+| `issue_flag`
+| `bool`
+| Set by the *Flag as Wrong…* dialog (Photos tab) when the photo is manually marked as wrongly defined; shown with a ⚠ marker in the photo list and listed in the Issue Report
+
+| `issue_note`
+| `str`
+| Free-text description of what's wrong, entered in the *Flag as Wrong…* dialog; included in the Issue Report
+
+| `issue_correction`
+| `dict`
+| `{"position": str, "type": str, "color": str}` — corrected values entered in the *Flag as Wrong…* dialog. When `issue_flag` is set, export (`_write_pack_ini`) writes these values instead of the photo's original `position`/`type`/`color`
 |===

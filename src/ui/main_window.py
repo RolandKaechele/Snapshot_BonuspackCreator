@@ -304,6 +304,24 @@ class MainWindow(QMainWindow):
         show_info(self, "Pack Statistics", format_stats_report(stats),
                   tag="MainWindow.on_pack_statistics")
 
+    def on_generate_issue_report(self) -> None:
+        from PyQt6.QtWidgets import QFileDialog #type: ignore
+        from modules.issue_report import write_issue_report
+        pack_id = self._pack_manager.get("id") or "pack"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Generate Issue Report", f"{pack_id}_issue_report.md",
+            "Markdown (*.md);;All files (*)"
+        )
+        if not path:
+            return
+        try:
+            write_issue_report(self._pack_manager.data, path)
+            show_info(self, "Generate Issue Report", f"Issue report written to:\n{path}",
+                      tag="MainWindow.on_generate_issue_report")
+        except Exception as exc:
+            show_error(self, "Generate Issue Report Failed", str(exc), exc=exc,
+                       tag="MainWindow.on_generate_issue_report")
+
     # ── Help menu handlers ──────────────────────────────────────────────────
 
     def on_about(self) -> None:

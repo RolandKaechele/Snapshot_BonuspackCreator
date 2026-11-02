@@ -1,0 +1,31 @@
+== Issue Report
+
+*Tools → Generate Issue Report…* writes a Markdown (`.md`) file summarizing every known problem with the current pack, for sharing with other pack authors or attaching to a bug report.
+
+You'll be prompted for a save location; the file defaults to `<pack id>_issue_report.md`.
+
+=== What's Included
+
+[cols="1,3"]
+|===
+| Section | Contents
+
+| Position / Pack Type Mismatches
+| Photos whose `Position` is reserved for a different Pack Type (e.g. a `Love Lens Photo` position inside a Photos pack) — see xref:05-photos-tab.adoc[Photos Tab].
+
+| ID Conflicts
+| Photo IDs this pack would assign that are already claimed by a different pack, checked against the photo ID registry (same check as *Verify Photo IDs* on the Pack Info tab). Skipped with a note if no registry file has been built yet.
+
+| Broken References
+| Filenames referenced by the pack (photos, overlays, textures, events, dialog scene commands) that don't exist on disk — the same check as the *Broken References* list on the xref:10b-orphaned-files-tab.adoc[Orphaned Files tab].
+
+| Orphaned Files
+| Files present on disk but not referenced anywhere in the pack — the same check as the *Orphaned Files* list on the xref:10b-orphaned-files-tab.adoc[Orphaned Files tab]. Only populated when the pack was imported from a folder (so the source folder is known).
+
+| Flagged Photos
+| Photos manually marked via *Flag as Wrong…* on the Photos tab, showing the original vs. corrected Position/Type/Color and the note entered for each.
+|===
+
+If none of the above apply, the report simply states "No issues found."
+
+TIP: Sections with nothing to report are omitted entirely, so the report only contains what's actually relevant to this pack.

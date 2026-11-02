@@ -20,6 +20,7 @@ from modules.image_utils import ASSET_FILTER, load_pixmap
 from modules.tooltips import set_tip
 from ui.image_viewer import attach_viewer
 from modules.ai_image_gen import open_ai_generate_dialog
+from modules.position_rules import position_mismatch
 from ui.dialogs import show_file_removal_choice
 
 if TYPE_CHECKING:
@@ -197,6 +198,12 @@ class PictureWidget(QWidget):
         self._btn_preprocess.setToolTip(
             "Resize/compress selected photos (or all photos, if none selected) on disk.")
         self._btn_preprocess.clicked.connect(self._on_preprocess_images)
+        self._btn_flag_wrong = QPushButton("Flag as Wrong…")
+        self._btn_flag_wrong.setFixedWidth(110)
+        self._btn_flag_wrong.setToolTip(
+            "Mark the selected photo as wrongly defined with corrected values, for the issue report.")
+        self._btn_flag_wrong.clicked.connect(self._on_flag_wrong)
+        self._btn_flag_wrong.setEnabled(False)
         self._lbl_count = QLabel("0 images")
         self._cmb_display_size = QComboBox()
         for label, _ in _DISPLAY_SIZES:
@@ -207,6 +214,7 @@ class PictureWidget(QWidget):
         toolbar.addWidget(self._btn_ai)
         toolbar.addWidget(self._btn_naming_help)
         toolbar.addWidget(self._btn_preprocess)
+        toolbar.addWidget(self._btn_flag_wrong)
         toolbar.addStretch()
         toolbar.addWidget(QLabel("Size:"))
         toolbar.addWidget(self._cmb_display_size)
@@ -527,19 +535,23 @@ class PictureWidget(QWidget):
         photos: list = self._pm.data.get("photos", [])
         if not selected:
             self._set_detail_enabled(False)
+            self._btn_flag_wrong.setEnabled(False)
             self._preview_label.setText("No image selected")
             self._preview_label.setPixmap(QPixmap())
             return
         row = self._list.row(selected[0])
         if not (0 <= row < len(self._row_to_index)):
             self._set_detail_enabled(False)
+            self._btn_flag_wrong.setEnabled(False)
             return
         row = self._row_to_index[row]
         if row < 0 or row >= len(photos):
             self._set_detail_enabled(False)
+            self._btn_flag_wrong.setEnabled(False)
             return
         multi = len(selected) > 1
         self._set_detail_enabled(True, multi)
+        self._btn_flag_wrong.setEnabled(not multi)
         self._load_detail(photos[row])
         self._load_preview(photos[row].get("source") if not multi else None)
 
@@ -606,10 +618,15 @@ class PictureWidget(QWidget):
     def _current_positions(self):
         game = self._pm.get("game")
         if game == "lewdshores":
-            return LEWD_POSITIONS
-        if game == "naughtynightmares":
-            return NAUGHTY_NIGHTMARES_POSITIONS
-        return SNAPSHOT_POSITIONS
+            positions = LEWD_POSITIONS
+        elif game == "naughtynightmares":
+            positions = NAUGHTY_NIGHTMARES_POSITIONS
+        else:
+            positions = SNAPSHOT_POSITIONS
+        # Positions reserved for another Pack Type (e.g. "City Event Photo",
+        # "Love Lens Photo") aren't offered unless that Pack Type is active.
+        pack_type = self._pm.get("pack_type", "photos")
+        return [(v, l) for v, l in positions if position_mismatch(v, pack_type) is None]
 
     def _current_types(self):
         game = self._pm.get("game")
@@ -710,6 +727,25 @@ class PictureWidget(QWidget):
     def _on_display_size_changed(self) -> None:
         self._rebuild_list()
 
+    def _on_flag_wrong(self) -> None:
+        selected = self._list.selectedItems()
+        if len(selected) != 1:
+            return
+        row = self._list.row(selected[0])
+        if not (0 <= row < len(self._row_to_index)):
+            return
+        row = self._row_to_index[row]
+        photos: list = self._pm.data.get("photos", [])
+        if not (0 <= row < len(photos)):
+            return
+        from modules.issue_report import FlagWrongDialog
+        photo = photos[row]
+        dlg = FlagWrongDialog(self, photo, self._current_positions(),
+                              self._current_types(), self._current_specials())
+        if dlg.exec() == dlg.DialogCode.Accepted:
+            dlg.apply_to_photo()
+            self._rebuild_list()
+
     def _rebuild_list(self) -> None:
         size_idx = self._cmb_display_size.currentIndex()
         _, icon_px = _DISPLAY_SIZES[size_idx]
@@ -727,6 +763,7 @@ class PictureWidget(QWidget):
         photos: list = self._pm.data.get("photos", [])
         self._list.clear()
         filter_text = self._edit_filter.text().strip().lower() if hasattr(self, "_edit_filter") else ""
+        pack_type = self._pm.get("pack_type", "photos")
         self._row_to_index = []
         for idx, photo in enumerate(photos):
             label = os.path.splitext(
@@ -737,7 +774,16 @@ class PictureWidget(QWidget):
                 )) + " " + label
                 if filter_text not in haystack.lower():
                     continue
-            item = QListWidgetItem(label)
+            mismatch = position_mismatch(photo.get("position", ""), pack_type)
+            item = QListWidgetItem()
+            if photo.get("issue_flag") or mismatch:
+                item.setText(f"\u26a0 {label}")
+                if mismatch:
+                    item.setToolTip(
+                        f"Position '{photo.get('position')}' is reserved for Pack Type "
+                        f"'{mismatch}', not the current pack's Pack Type.")
+            else:
+                item.setText(label)
             pix = load_pixmap(photo.get("source")) if photo.get("source") else QPixmap()
             if not pix.isNull():
                 item.setIcon(QIcon(pix.scaled(

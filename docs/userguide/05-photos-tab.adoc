@@ -85,6 +85,20 @@ Enable *Overwrite Type* or *Overwrite Color/Special* to replace the displayed la
 
 Mark *Use as Thumbnail* on exactly one image to set the pack preview icon.
 
+NOTE: `Position` values that only make sense for a different Pack Type — `City Event Photo` and `Love Lens Photo` — are hidden from the dropdown unless that Pack Type (*Events* / *Love Lens*) is currently active. If a photo imported from elsewhere already uses one of those positions while the pack's Pack Type doesn't match, its entry in the list is marked with a \u26a0 icon and a tooltip explaining the mismatch; see xref:10c-issue-report.adoc[Issue Report].
+
+=== Flagging a Photo as Wrong
+
+If a photo's Position, Type, or Color is wrong but you want to record the correct values for a bug report instead of (or in addition to) fixing it immediately, select the photo and click *Flag as Wrong…* in the toolbar.
+
+The dialog lets you:
+
+* Check *This photo is wrongly defined* to flag it.
+* Enter the corrected Position, Type, and Color/Special.
+* Add a free-text note describing the problem.
+
+Flagged photos show a \u26a0 icon in the list. On export, the pack's `pack.ini` is written with the *corrected* values instead of the original ones — the original values stay in the project file so the issue remains visible and reportable. See xref:10c-issue-report.adoc[Issue Report] to generate a Markdown summary of every flagged photo.
+
 === Preview
 
 The right panel shows a scaled preview of the selected image.

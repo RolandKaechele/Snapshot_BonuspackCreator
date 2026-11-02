@@ -107,6 +107,12 @@ def build_menubar(window: QMainWindow) -> None:
     act_stats.triggered.connect(window.on_pack_statistics)
     tools_menu.addAction(act_stats)
 
+    tools_menu.addSeparator()
+
+    act_issue_report = QAction("&Generate Issue Report…", window)
+    act_issue_report.triggered.connect(window.on_generate_issue_report)
+    tools_menu.addAction(act_issue_report)
+
     # Help
     help_menu = bar.addMenu("&Help")
 

@@ -53,6 +53,8 @@ snapshot_pack_creator_V1_9/
 │       ├── cutscene_widget.py
 │       ├── love_lens.py
 │       ├── orphaned_files.py    ← Orphaned Files tab
+│       ├── position_rules.py    ← Position values reserved for a Pack Type (NEW)
+│       ├── issue_report.py      ← Flag-as-Wrong dialog + Issue Report generation (NEW)
 │       └── plugin_system.py
 ├── tests/
 ├── temp/                 ← portable Python runtime (never committed)

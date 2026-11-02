@@ -92,7 +92,13 @@ def _collect_broken(data: dict) -> list[str]:
             broken.append(label or os.path.basename(path))
 
     for photo in data.get("photos", []):
-        _check(photo.get("source", ""), photo.get("name", ""))
+        name = photo.get("name", "")
+        source = photo.get("source")
+        if source:
+            _check(source, name)
+        elif name:
+            # source is None when import could not locate any matching file for this name
+            broken.append(name)
 
     for key, items in data.get("overlays", {}).items():
         for p in items:

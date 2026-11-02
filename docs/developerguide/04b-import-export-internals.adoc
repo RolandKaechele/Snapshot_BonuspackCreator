@@ -41,6 +41,8 @@ Per-photo dict keys: `name`, `source` (absolute path or `None`), `position`, `ty
 The `_type_key` field is set to `"newType"` when the source ini used `photoname.newType=` (Lewd Shores new-format packs) instead of `photoname.type=`.
 Export restores the original key name from this field, so roundtrips are lossless.
 
+A photo's `position` value is not validated against `pack_type` on import — a pack with `pack_type == "photos"` can legally be imported with photos using the `event` or `hypno` position (these are reserved for `"events"`/`"lovelens"` packs respectively, see `modules/position_rules.py`). The Photos tab flags such photos with a \u26a0 marker, and `issue_report.detect_position_mismatches()` lists them in the Issue Report so the pack author can fix them before publishing.
+
 ==== Multi-ini merge
 
 After reading all parts, `run_import` merges them:
@@ -68,6 +70,8 @@ After reading all parts, `run_import` merges them:
 Photos are normally chunked at 100 per file, producing a separate ini file per chunk (`pack.ini` for single-part, `{id}1.ini` / `{id}2.ini` … for multi-part).
 
 **Exception — wide-idrange preservation:** if the declared `idrange` already spans more than 100 IDs and is wide enough to cover every photo (`range_width > 100 and range_width >= photo_count`), the pack is kept as a **single** `pack.ini` with the original `idrange` written verbatim, instead of being force-split into 100-ID parts. This matches official packs that ship >100 photos under one wide range (e.g. `murderclub`: 104 photos under `idrange=200100-200299`). When the declared range is *not* wide enough for the photo count, the normal 100-per-part auto-split is used as a fallback.
+
+**Issue-flagged photos:** for each photo, `_write_pack_ini()` calls `issue_report.effective_photo_traits(photo)`, which returns the photo's `position`/`type`/`color` overridden by `issue_correction` when `issue_flag` is set. The ini is written with these *corrected* values; the photo dict's original (wrong) values are left untouched in memory so the Issue Report can still show both. See xref:07-pack-json-schema.adoc[Pack JSON Schema] for the `issue_flag`/`issue_note`/`issue_correction` fields.
 
 For each part (when splitting does occur):
 

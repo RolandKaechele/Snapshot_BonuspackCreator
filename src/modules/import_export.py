@@ -725,16 +725,21 @@ def _write_pack_ini(pack_folder: str, data: dict) -> None:
                 lines.append("")
 
         if chunk:
+            from modules.issue_report import effective_photo_traits
             names_val = ",".join(p.get("name", "") for p in chunk)
             lines += ["[Photos]", f"names={names_val}", ""]
             for photo in chunk:
                 n = photo.get("name", "")
                 type_key = photo.get("_type_key", "type")
+                # Use corrected Position/Type/Color when the photo is flagged wrong.
+                traits = effective_photo_traits(photo)
+                merged = dict(photo)
+                merged.update({k: v for k, v in traits.items() if v})
                 for key in ("position", "type", "color",
                             "hypnoType", "hypnosisType", "sequenceType", "photoPosition", "special", "specialType"):
-                    if key in photo and photo[key]:
+                    if key in merged and merged[key]:
                         out_key = type_key if key == "type" else key
-                        lines.append(f"{n}.{out_key}={photo[key]}")
+                        lines.append(f"{n}.{out_key}={merged[key]}")
             lines.append("")
 
         filename = f"{pack_id}{part_num}.ini" if multi else "pack.ini"

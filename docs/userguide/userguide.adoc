@@ -26,6 +26,8 @@ include::09-love-lens-tab.adoc[]
 
 include::10b-orphaned-files-tab.adoc[]
 
+include::10c-issue-report.adoc[]
+
 include::10-plugin-system.adoc[]
 
 include::11-tips.adoc[]
