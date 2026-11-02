@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import ( #type: ignore
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QGroupBox, QFormLayout, QPushButton, QSplitter,
     QListWidget, QListWidgetItem, QFileDialog, QLineEdit, QTabWidget,
-    QColorDialog,
+    QColorDialog, QStackedWidget,
 )
 from PyQt6.QtGui import QPixmap, QColor  # type: ignore
 from PyQt6.QtCore import Qt #type: ignore
@@ -17,6 +17,7 @@ from modules.image_utils import ASSET_FILTER, load_pixmap
 from modules.tooltips import set_tip
 from ui.image_viewer import attach_viewer
 from modules.ai_image_gen import open_ai_generate_dialog, open_ai_video_gen_dialog
+from modules.video_widget import VideoPreviewWidget, is_video_file
 
 if TYPE_CHECKING:
     from modules.pack_manager import PackManager
@@ -283,12 +284,20 @@ class LoveLensWidget(QWidget):
         files_list = QListWidget()
         inner_split.addWidget(files_list)
 
+        # Stacked widget: index 0 = image label, index 1 = video preview
+        preview_stack = QStackedWidget()
+        preview_stack.setMinimumWidth(120)
+        preview_stack.setStyleSheet("background:#1a1a1a;")
+
         preview = QLabel()
         preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview.setMinimumWidth(120)
         preview.setText("No preview")
-        preview.setStyleSheet("background:#1a1a1a;")
-        inner_split.addWidget(preview)
+        preview_stack.addWidget(preview)  # index 0
+
+        video_preview = VideoPreviewWidget(loop=True)
+        preview_stack.addWidget(video_preview)  # index 1
+
+        inner_split.addWidget(preview_stack)
         inner_split.setSizes([200, 240])
 
         def _multi(row: int) -> bool:
@@ -301,6 +310,11 @@ class LoveLensWidget(QWidget):
 
         def _load_preview(path: str) -> None:
             _cur_path[0] = path
+            if path and is_video_file(path):
+                video_preview.set_path(path)
+                preview_stack.setCurrentIndex(1)
+                return
+            preview_stack.setCurrentIndex(0)
             px = load_pixmap(path)
             if px.isNull():
                 preview.clear()
@@ -322,13 +336,15 @@ class LoveLensWidget(QWidget):
 
         def _preview_resize(ev):
             _orig_resize(ev)
-            if _cur_path[0]:
+            if _cur_path[0] and preview_stack.currentIndex() == 0:
                 _load_preview(_cur_path[0])
 
         preview.resizeEvent = _preview_resize
 
         def _on_file_selected(r: int) -> None:
             if r < 0 or r >= files_list.count():
+                video_preview.clear()
+                preview_stack.setCurrentIndex(0)
                 preview.clear()
                 preview.setText("No preview")
                 return
@@ -341,6 +357,8 @@ class LoveLensWidget(QWidget):
 
         def _on_slot(row: int) -> None:
             files_list.clear()
+            video_preview.clear()
+            preview_stack.setCurrentIndex(0)
             preview.clear()
             preview.setText("No preview")
             if row < 0:

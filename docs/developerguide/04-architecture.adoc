@@ -142,7 +142,7 @@ A plugin opts into a hardware check by declaring a module-level `MIN_VRAM_GB` co
 | `CutsceneWidget` — compact sequence list; tabbed Preview and Metadata panels
 
 | `modules/love_lens.py`
-| `LoveLensWidget` — tabbed Character Setup / 2D Overlay Slots / Texture Slots / Result Photos; `PHOTO_TYPES` includes the optional `double_shot` slot (skipped by `get_missing_love_lens_elements()`, same `(optional)`-label convention as `droppedClothTexture`)
+| `LoveLensWidget` — tabbed Character Setup / 2D Overlay Slots / Texture Slots / Result Photos; `PHOTO_TYPES` includes the optional `double_shot` slot (skipped by `get_missing_love_lens_elements()`, same `(optional)`-label convention as `droppedClothTexture`); slot preview is a `QStackedWidget` (image `QLabel` / `VideoPreviewWidget`) so `.bytes`/`.byte` overlay videos (e.g. `hypnoOverlay_*`) play inline instead of showing "Cannot preview"
 
 | `modules/plugin_system.py`
 | `PluginSystem` — discovers and imports plugins from `plugins/`; `load_disabled_plugins()`/`save_disabled_plugins()` read/write `src/plugin_config.json`; `discovered_plugin_names()` lists all found modules regardless of load/disabled state

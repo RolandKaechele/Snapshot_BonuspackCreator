@@ -10,8 +10,9 @@ Set the character model, hair style, accessories, hair color, and eye color.
 
 === 2D Overlay Slots
 
-Click *+* next to each overlay slot to assign a PNG image.
-A single slot accepts one image (click *+* again to replace).
+Click *+* next to each overlay slot to assign a PNG image or a `.bytes`/`.byte` overlay video (renamed MP4).
+A single slot accepts one file (click *+* again to replace).
+Video overlays play inline in the preview pane; images are shown as a static picture.
 
 === Texture Slots
 
