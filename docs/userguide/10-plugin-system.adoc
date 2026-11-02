@@ -43,7 +43,7 @@ venv\Scripts\python.exe -m pip install -r plugins\my_plugin\requirements.txt
 | The plugin's `__version__` string, if it declares one (`—` otherwise)
 
 | Status
-| `Enabled`, `Disabled`, or `Failed to load` (check `--debug` console output for the error)
+| `Enabled`, `Disabled`, `Failed to load` (check `--debug` console output for the error), or `Unsupported Hardware` (the plugin declares a minimum VRAM requirement your GPU doesn't meet)
 
 | Description
 | The first line of the plugin's module docstring
@@ -51,3 +51,5 @@ venv\Scripts\python.exe -m pip install -r plugins\my_plugin\requirements.txt
 
 Re-check a disabled plugin (and restart) to re-enable it.
 The choice is stored in `plugin_config.json` next to `registry.json`.
+
+NOTE: Plugins marked *Unsupported Hardware* (e.g. `moss_image` on a GPU with less VRAM than it needs) have their checkbox greyed out and can't be checked — hover the row for the exact requirement and what was detected on your machine.

@@ -104,6 +104,25 @@ files + `diffusers`), and `plugins/anima_diffusion` (local Cosmos-Predict2/
 Anima DiT model, `supports_guidance_scale=True`) for full reference
 implementations.
 
+=== Declaring a Minimum VRAM Requirement
+
+If your plugin's model only runs on GPUs above a certain VRAM size, declare
+it with a module-level `MIN_VRAM_GB`:
+
+[source,python]
+----
+MIN_VRAM_GB = 12  # see plugins/moss_image/__init__.py
+----
+
+`PluginSystem.hardware_status()` compares this against the detected primary
+CUDA GPU's total VRAM. When it isn't met, `load_plugins()` skips calling
+your `register(app)` (same as a user-disabled plugin) and *Tools → Manage
+Plugins…* shows your plugin as *Unsupported Hardware* with its checkbox
+greyed out and a tooltip explaining why. This is a courtesy convention on
+top of `is_available()` — also gate your own `is_available()` (and any
+worker's device selection) on VRAM yourself if your backend should also stay
+hidden from the AI Generate dialog, not just from Manage Plugins.
+
 === LoRA Add-on Plugins
 
 Plugins that provide a LoRA weights file for an existing diffusion backend

@@ -47,6 +47,13 @@ Every `PackManager.save()` also writes a timestamped copy of the just-saved JSON
 `modules/plugin_dialog.py`'s `PluginManagerDialog` (opened via `Tools → Manage Plugins…`) shows every *discovered* plugin (not just loaded ones) in a table with Enabled / Name / Version / Status / Description columns, and writes the unchecked set back via `save_disabled_plugins()` on close.
 Changes take effect on the next restart, since plugins are only imported once at startup.
 
+=== Plugin Hardware Gating
+
+`load_plugins()` now always imports every discovered module (regardless of its disabled state) so `PluginManagerDialog` can show accurate version/description/hardware status for all of them — safe because plugins only do heavy imports (torch, diffusers, …) lazily inside functions, never at module scope.
+A plugin opts into a hardware check by declaring a module-level `MIN_VRAM_GB` constant (see `plugins/moss_image/__init__.py`, which needs ≈ 12 GB).
+`PluginSystem.hardware_status(name)` compares it against the primary CUDA GPU's VRAM (`torch.cuda.get_device_properties(0).total_memory`) and returns `""` when satisfied, or a short reason otherwise.
+`load_plugins()` skips calling `register()` for any plugin that fails this check, same as a user-disabled one; `PluginManagerDialog` shows its row as *Unsupported Hardware* with the checkbox greyed out, forced unchecked, and a tooltip with the reason, so it can't be re-enabled on that machine.
+
 === Module Map
 
 [cols="1,3"]

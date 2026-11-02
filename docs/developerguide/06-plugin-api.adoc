@@ -19,6 +19,7 @@ A plugin is any Python package in `plugins/` that exposes `register(app)`.
 * Files ending in `.py` (not starting with `_`) are imported as modules.
 * Import errors are caught and logged — they never crash the application.
 * Modules listed in `src/plugin_config.json` (`{"disabled": [...]}`) are skipped entirely — the user can toggle this list via *Tools → Manage Plugins…* (`modules/plugin_dialog.py`). Changes apply on the next restart, so a plugin's `register(app)` is not guaranteed to run on every launch.
+* A plugin declaring a module-level `MIN_VRAM_GB` is also skipped (without being added to `plugin_config.json`) when `PluginSystem.hardware_status()` finds the detected GPU's VRAM below it — see `plugins/moss_image/__init__.py`.
 
 === Minimal Plugin
 

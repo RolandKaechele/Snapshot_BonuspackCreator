@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import types
 import importlib
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,17 @@ _PLUGINS_DIR = os.path.join(
 _CONFIG_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "plugin_config.json"
 )
+
+
+def _detected_vram_gb() -> float | None:
+    """Return the primary CUDA GPU's total VRAM in GB, or None if unavailable."""
+    try:
+        import torch  # type: ignore
+        if torch.cuda.is_available():
+            return torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+    except Exception:
+        pass
+    return None
 
 
 def load_disabled_plugins() -> set[str]:
@@ -48,6 +60,7 @@ class PluginSystem:
         self._loaded: list[str] = []
         self._info: dict[str, dict] = {}
         self._discovered: list[str] = []
+        self._modules: dict[str, types.ModuleType] = {}
 
     def discovered_plugin_names(self) -> list[str]:
         """All plugin module names found in plugins/, loaded or not."""
@@ -77,20 +90,37 @@ class PluginSystem:
                 continue
 
             self._discovered.append(module_name)
+
+            # Import unconditionally (even disabled/hardware-unsupported plugins) so
+            # Manage Plugins can show version/description/MIN_VRAM_GB for every
+            # discovered plugin — safe because plugins only do heavy imports (torch,
+            # diffusers, …) lazily inside functions, never at module level.
+            try:
+                mod = importlib.import_module(module_name)
+            except Exception as exc:
+                _dlog("PluginSystem.load_plugins", f"Failed to import {module_name}: {exc}")
+                continue
+            self._modules[module_name] = mod
+            self._info[module_name] = {
+                "version": getattr(mod, "__version__", ""),
+                "description": (getattr(mod, "__doc__", "") or "").strip().splitlines()[0]
+                if getattr(mod, "__doc__", "") else "",
+            }
+
             if module_name in disabled:
                 _dlog("PluginSystem.load_plugins", f"Skipped disabled plugin: {module_name}")
                 continue
 
+            unsupported = self.hardware_status(module_name)
+            if unsupported:
+                _dlog("PluginSystem.load_plugins",
+                      f"Skipped {module_name}: {unsupported}")
+                continue
+
             try:
-                mod = importlib.import_module(module_name)
                 if hasattr(mod, "register") and callable(mod.register):
                     mod.register(self._app)
                     self._loaded.append(module_name)
-                    self._info[module_name] = {
-                        "version": getattr(mod, "__version__", ""),
-                        "description": (getattr(mod, "__doc__", "") or "").strip().splitlines()[0]
-                        if getattr(mod, "__doc__", "") else "",
-                    }
                     _dlog("PluginSystem.load_plugins", f"Loaded plugin: {module_name}")
                 else:
                     _dlog("PluginSystem.load_plugins",
@@ -103,5 +133,23 @@ class PluginSystem:
         return list(self._loaded)
 
     def plugin_info(self, name: str) -> dict:
-        """Return {'version': str, 'description': str} for a loaded plugin."""
+        """Return {'version': str, 'description': str} for a discovered plugin."""
         return self._info.get(name, {"version": "", "description": ""})
+
+    def hardware_status(self, name: str) -> str:
+        """Return '' when *name*'s hardware requirements are met (or it declares
+        none), else a short human-readable reason it can't run on this machine.
+
+        Convention: a plugin module may define a module-level ``MIN_VRAM_GB``
+        (int/float) to opt into this check; see plugins/moss_image/__init__.py.
+        """
+        mod = self._modules.get(name)
+        min_vram = getattr(mod, "MIN_VRAM_GB", None) if mod else None
+        if not min_vram:
+            return ""
+        vram = _detected_vram_gb()
+        if vram is None:
+            return f"Requires a CUDA GPU with \u2248{min_vram:g} GB VRAM; no CUDA GPU detected"
+        if vram < min_vram:
+            return f"Requires \u2248{min_vram:g} GB VRAM; detected GPU has only {vram:.1f} GB"
+        return ""

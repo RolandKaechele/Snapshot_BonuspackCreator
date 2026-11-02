@@ -36,7 +36,9 @@ class PluginManagerDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(
             "Discovered plugins. Unchecking a plugin disables it; "
-            "restart the app for changes to take effect."
+            "restart the app for changes to take effect.\n"
+            "Plugins whose hardware requirements (e.g. VRAM) aren't met on this "
+            "machine are greyed out and can't be enabled — hover the row for details."
         ))
 
         self._table = QTableWidget(0, 5)
@@ -58,9 +60,13 @@ class PluginManagerDialog(QDialog):
         for row, name in enumerate(names):
             is_disabled = name in self._disabled
             is_loaded = name in loaded
+            unsupported = self._plugin_system.hardware_status(name)
 
             checkbox = QCheckBox()
-            checkbox.setChecked(not is_disabled)
+            checkbox.setChecked(not is_disabled and not unsupported)
+            checkbox.setEnabled(not unsupported)
+            if unsupported:
+                checkbox.setToolTip(unsupported)
             cell = QWidget()
             cell_layout = QHBoxLayout(cell)
             cell_layout.addWidget(checkbox)
@@ -75,7 +81,9 @@ class PluginManagerDialog(QDialog):
             version_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self._table.setItem(row, _COL_VERSION, version_item)
 
-            if is_disabled:
+            if unsupported:
+                status = "Unsupported Hardware"
+            elif is_disabled:
                 status = "Disabled"
             elif is_loaded:
                 status = "Enabled"
@@ -83,12 +91,17 @@ class PluginManagerDialog(QDialog):
                 status = "Failed to load"
             status_item = QTableWidgetItem(status)
             status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if unsupported:
+                status_item.setToolTip(unsupported)
             self._table.setItem(row, _COL_STATUS, status_item)
 
             description = meta.get("description", "")
-            if not is_loaded and not is_disabled:
+            if not is_loaded and not is_disabled and not unsupported:
                 description = (description + " " if description else "") + "(see debug log)"
-            self._table.setItem(row, _COL_DESCRIPTION, QTableWidgetItem(description))
+            description_item = QTableWidgetItem(description)
+            if unsupported:
+                description_item.setToolTip(unsupported)
+            self._table.setItem(row, _COL_DESCRIPTION, description_item)
 
         layout.addWidget(self._table, 1)
 
