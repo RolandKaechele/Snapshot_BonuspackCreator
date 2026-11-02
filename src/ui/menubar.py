@@ -35,6 +35,15 @@ def build_menubar(window: QMainWindow) -> None:
 
     file_menu.addSeparator()
 
+    act_restore_backup = QAction("Restore &Previous Version…", window)
+    act_restore_backup.triggered.connect(window.on_restore_backup)
+    file_menu.addAction(act_restore_backup)
+
+    window._recent_menu = file_menu.addMenu("Open &Recent")
+    window._recent_menu.aboutToShow.connect(window.on_populate_recent_menu)
+
+    file_menu.addSeparator()
+
     act_import = QAction("&Import Bonus Content…", window)
     act_import.triggered.connect(window.on_import_bonus_content)
     file_menu.addAction(act_import)
@@ -42,6 +51,10 @@ def build_menubar(window: QMainWindow) -> None:
     act_export = QAction("&Export Bonus Content…", window)
     act_export.triggered.connect(window.on_export_bonus_content)
     file_menu.addAction(act_export)
+
+    act_export_zip = QAction("Export Bonus Content as &ZIP…", window)
+    act_export_zip.triggered.connect(window.on_export_bonus_content_zip)
+    file_menu.addAction(act_export_zip)
 
     file_menu.addSeparator()
 
@@ -52,6 +65,18 @@ def build_menubar(window: QMainWindow) -> None:
 
     # Edit
     edit_menu = bar.addMenu("&Edit")
+
+    act_undo = QAction("&Undo", window)
+    act_undo.setShortcut("Ctrl+Z")
+    act_undo.triggered.connect(window.on_undo)
+    edit_menu.addAction(act_undo)
+
+    act_redo = QAction("&Redo", window)
+    act_redo.setShortcut("Ctrl+Y")
+    act_redo.triggered.connect(window.on_redo)
+    edit_menu.addAction(act_redo)
+
+    edit_menu.addSeparator()
 
     act_settings = QAction("&Settings…", window)
     act_settings.triggered.connect(window.on_settings)
@@ -67,6 +92,20 @@ def build_menubar(window: QMainWindow) -> None:
     act_edit_prompts = QAction("Edit AI &Prompts…", window)
     act_edit_prompts.triggered.connect(window.on_edit_prompts)
     tools_menu.addAction(act_edit_prompts)
+
+    tools_menu.addSeparator()
+
+    act_dedup = QAction("Find &Duplicate Assets…", window)
+    act_dedup.triggered.connect(window.on_find_duplicates)
+    tools_menu.addAction(act_dedup)
+
+    act_diff = QAction("&Compare Packs…", window)
+    act_diff.triggered.connect(window.on_compare_packs)
+    tools_menu.addAction(act_diff)
+
+    act_stats = QAction("Pack &Statistics…", window)
+    act_stats.triggered.connect(window.on_pack_statistics)
+    tools_menu.addAction(act_stats)
 
     # Help
     help_menu = bar.addMenu("&Help")

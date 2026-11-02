@@ -27,6 +27,26 @@ On import, `gameID`/`plugID` is read from `[Mod]` / `[Pack]` and stored as `game
 `modules/tooltips.py` holds a central `TIPS: dict[str, str]` registry.
 Call `set_tip(widget, key)` to attach a tooltip — this keeps tooltip text out of widget code.
 
+=== Undo / Redo
+
+`modules/history_manager.py` defines `HistoryManager` — a stack of full pack-JSON snapshots (`json.dumps(data, sort_keys=True)`), capped at 50 entries.
+`PackManager` owns one instance (`self.history`); `new_pack()` and `load()` call `history.reset(self._data)` to start a fresh baseline, and `push_history()` pushes the current state (a no-op when nothing changed since the last snapshot).
+`PackManager.undo()` / `redo()` pull a snapshot off the stack and replace `self._data` with it (re-wrapped in a `_DirtyDict`), then mark the pack dirty.
+Since many widgets mutate nested pack data (e.g. a photo's `position` key) without going through `mark_dirty()`, `MainWindow` runs an 800 ms `QTimer` that calls `push_history()` periodically instead of relying on per-edit hooks — this coalesces rapid edits (e.g. typing) into a single undo step.
+`Edit → Undo`/`Redo` (Ctrl+Z / Ctrl+Y) call `MainWindow.on_undo()`/`on_redo()`, which call `_refresh_all()` on success so every tab re-reads the restored data.
+
+=== Auto-Backup and Recent Files
+
+Every `PackManager.save()` also writes a timestamped copy of the just-saved JSON into a `.backups/` folder beside the pack file (`_write_backup()`), pruning to the last 10 via `list_backups()`.
+`restore_backup(backup_path)` loads a backup's content while keeping the pack's current save path, so the next *Save* overwrites the original file with the restored content.
+`modules/recent_files.py` persists up to 10 recently opened/saved pack paths to `src/recent_packs.json`; `MainWindow.on_populate_recent_menu()` rebuilds the `File → Open Recent` submenu from it each time the menu opens.
+
+=== Plugin Enable/Disable
+
+`modules/plugin_system.py` reads `src/plugin_config.json` (`load_disabled_plugins()`) before importing each discovered module in `load_plugins()`, skipping any module name listed under `"disabled"`.
+`modules/plugin_dialog.py`'s `PluginManagerDialog` (opened via `Tools → Manage Plugins…`) lists every *discovered* plugin (not just loaded ones) with a checkbox, and writes the unchecked set back via `save_disabled_plugins()` on close.
+Changes take effect on the next restart, since plugins are only imported once at startup.
+
 === Module Map
 
 [cols="1,3"]
@@ -55,7 +75,34 @@ Call `set_tip(widget, key)` to attach a tooltip — this keeps tooltip text out 
 | Catppuccin Mocha dark theme stylesheet; `QComboBox::down-arrow` triangle arrow
 
 | `modules/pack_manager.py`
-| `PackManager` — load/save JSON, `new_pack()`, typed accessors; `is_dirty` / `mark_dirty()` — automatic dirty tracking via `_DirtyDict` (all `pm.data[key]=` writes mark the pack dirty; reset by `save()`, `load()`, `new_pack()`)
+| `PackManager` — load/save JSON, `new_pack()`, typed accessors; `is_dirty` / `mark_dirty()` — automatic dirty tracking via `_DirtyDict` (all `pm.data[key]=` writes mark the pack dirty; reset by `save()`, `load()`, `new_pack()`); owns `history` (`HistoryManager`); `push_history()`/`undo()`/`redo()`; `_write_backup()`/`list_backups()`/`restore_backup()` for versioned `.backups/`
+
+| `modules/history_manager.py`
+| `HistoryManager` — capped JSON-snapshot undo/redo stack (`reset`, `snapshot`, `undo`, `redo`, `can_undo`, `can_redo`)
+
+| `modules/recent_files.py`
+| `load_recent()` / `add_recent(path)` — persists up to 10 recent pack paths to `src/recent_packs.json`
+
+| `modules/asset_dedup.py`
+| `find_duplicate_assets(pack_data)` — SHA-256 groups every referenced photo/overlay/texture/event asset, returns groups with 2+ members
+
+| `modules/pack_diff.py`
+| `diff_packs(data_a, data_b)` — text report of pack-info/photo/event/text differences between two pack JSON documents
+
+| `modules/pack_stats.py`
+| `compute_stats(pack_data)` / `format_stats_report(stats)` — counts by position/type/color, missing-trait warnings, event counts
+
+| `modules/zip_export.py`
+| `export_folder_as_zip(folder, zip_path, readme_text=None)` — zips a folder wrapped in a top-level `<folder-name>/` entry (matching official Bonus Content packs), plus `manifest.json` (SHA-256 per file) and an optional `README.txt`, both at the zip root
+
+| `modules/readme_templates.py`
+| `build_readme(game)` — per-game README.txt text (`"snapshot"` / `"lewdshores"` / `"naughtynightmares"`), matching the wording used in official packs
+
+| `modules/image_preprocess.py`
+| `preprocess_image_file(path, max_width, max_height, quality)` — Pillow in-place downscale/recompress, never upscales
+
+| `modules/plugin_dialog.py`
+| `PluginManagerDialog` — enable/disable checkbox list for discovered plugins, persisted via `plugin_system.save_disabled_plugins()`
 
 | `modules/import_export.py`
 | `ImportExportManager` — reads `pack.ini` folders (all ini merged); detects `gameID`/`plugID`; parses `[Defaults]` and `[Events]` into structured fields; writes split export folders; see <<import-export-internals>> for details
@@ -91,5 +138,5 @@ Call `set_tip(widget, key)` to attach a tooltip — this keeps tooltip text out 
 | `LoveLensWidget` — tabbed Character Setup / 2D Overlay Slots / Texture Slots / Result Photos; `PHOTO_TYPES` includes the optional `double_shot` slot (skipped by `get_missing_love_lens_elements()`, same `(optional)`-label convention as `droppedClothTexture`)
 
 | `modules/plugin_system.py`
-| `PluginSystem` — discovers and imports plugins from `plugins/`
+| `PluginSystem` — discovers and imports plugins from `plugins/`; `load_disabled_plugins()`/`save_disabled_plugins()` read/write `src/plugin_config.json`; `discovered_plugin_names()` lists all found modules regardless of load/disabled state
 |===

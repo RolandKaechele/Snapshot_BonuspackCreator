@@ -1,5 +1,6 @@
 """Plugin system — discovers and loads Python plugin packages from plugins/."""
 
+import json
 import os
 import sys
 import importlib
@@ -15,6 +16,29 @@ _PLUGINS_DIR = os.path.join(
     "..", "plugins"
 )
 
+_CONFIG_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "plugin_config.json"
+)
+
+
+def load_disabled_plugins() -> set[str]:
+    """Return the set of plugin module names the user has disabled."""
+    path = os.path.normpath(_CONFIG_PATH)
+    if not os.path.exists(path):
+        return set()
+    try:
+        with open(path, encoding="utf-8") as f:
+            return set(json.load(f).get("disabled", []))
+    except (OSError, json.JSONDecodeError):
+        return set()
+
+
+def save_disabled_plugins(disabled: set[str]) -> None:
+    path = os.path.normpath(_CONFIG_PATH)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"disabled": sorted(disabled)}, f, indent=2)
+
 
 class PluginSystem:
     """Discovers and loads plugin packages from the plugins/ directory."""
@@ -23,6 +47,11 @@ class PluginSystem:
         self._app = app
         self._loaded: list[str] = []
         self._info: dict[str, dict] = {}
+        self._discovered: list[str] = []
+
+    def discovered_plugin_names(self) -> list[str]:
+        """All plugin module names found in plugins/, loaded or not."""
+        return list(self._discovered)
 
     def load_plugins(self) -> None:
         plugins_dir = os.path.normpath(_PLUGINS_DIR)
@@ -32,6 +61,8 @@ class PluginSystem:
 
         if plugins_dir not in sys.path:
             sys.path.insert(0, plugins_dir)
+
+        disabled = load_disabled_plugins()
 
         for entry in os.listdir(plugins_dir):
             entry_path = os.path.join(plugins_dir, entry)
@@ -43,6 +74,11 @@ class PluginSystem:
             module_name = entry if is_package else (entry[:-3] if is_module else None)
 
             if not module_name:
+                continue
+
+            self._discovered.append(module_name)
+            if module_name in disabled:
+                _dlog("PluginSystem.load_plugins", f"Skipped disabled plugin: {module_name}")
                 continue
 
             try:

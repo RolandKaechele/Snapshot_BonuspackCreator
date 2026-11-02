@@ -81,7 +81,7 @@ class ImportExportManager:
 
     # ── Export ──────────────────────────────────────────────────────────────
 
-    def run_export(self) -> None:
+    def run_export(self, also_zip: bool = False) -> None:
         parent_folder = QFileDialog.getExistingDirectory(
             self._parent,
             "Select Output Parent Folder",
@@ -177,9 +177,15 @@ class ImportExportManager:
         try:
             _write_pack_ini(pack_folder, pm.data)
             _export_photo_files(data_folder, pm.data)
+            message = f"Pack exported to:\n{pack_folder}"
+            if also_zip:
+                from modules.zip_export import export_folder_as_zip
+                from modules.readme_templates import build_readme
+                zip_path = pack_folder.rstrip(os.sep) + ".zip"
+                export_folder_as_zip(pack_folder, zip_path, readme_text=build_readme(game))
+                message += f"\n\nZIP archive (with README.txt and checksum manifest):\n{zip_path}"
             self._parent.status().set_ok(f"Exported to: {pack_folder}")
-            show_info(self._parent, "Export Complete",
-                      f"Pack exported to:\n{pack_folder}",
+            show_info(self._parent, "Export Complete", message,
                       tag="ImportExportManager.run_export")
             _dlog("ImportExportManager.run_export", f"Exported {pack_folder}")
         except Exception as exc:

@@ -54,19 +54,30 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_cu128_installer.exe`. The frozen 
   - `[Special Traits]` (and the community aliases `[Special Type]`, `[Create your own traits]`) are normalised and re-emitted on export
   - Nested pack folder layouts (e.g. `PackFolder/PackFolder/Data/`) are searched automatically
 - Photos tab — add / remove images (multi-select supported); position/type/color dropdowns are editable so custom alias tokens (e.g. Naughty Nightmares' `ghostHands`, `monster-cock-attack`) display and persist instead of resetting to the first entry; Naughty Nightmares has its own suggested Position/Type/Color vocabulary (e.g. `ghostHands`, `demon`, `werewolves`) instead of reusing the base Snapshot! lists; *`photoBooth`* position added; label corrections for `xBar`, `flasher`, `window`; newly added images auto-preselect Position from a `<value>_` filename prefix (case-insensitive, e.g. `upskirt_00010.png` → Upskirt Shot), matching the current game's position list; a *Naming Conventions…* button lists every prefix → label mapping for the current game; bulk trait editing — select multiple photos with Ctrl/Shift-click and change Position, Type, Color, or Overwrite labels for all at once; display-size combobox (Standard / Large / Very Large) switches the list between compact text mode and icon-grid mode; Love Lens `hypnoType` field shown when position = `hypno`; no image cap
+  - A *Filter* box above the list narrows it down by filename, position, type, or color (case-insensitive substring match)
+  - A *Preprocess…* button resizes/recompresses selected photos (or all, if none selected) on disk via Pillow, given a max width/height and JPEG/PNG quality
   - **AI Generate** *(optional plugin, not bundled — install separately)* — generate images via a text-to-image API; choose a position and an optional photo type (plain, kinky, nude, …), enter a character prompt, and pick from the generated results; *(any)* photo-type iterates all modifier types automatically; generated images are tagged with position and type automatically; only user-selected images are copied to the pack folder
   - Game image formats `.dat`, `.jpa`, `.pna` (renamed JPEG/PNG) are previewed and imported correctly via content sniffing; `.byte` files (renamed MP4) are detected by magic bytes and shown in an inline video player widget
 - Overwrite Texts — key/value editor for the `[Hypnosis Text]` dialogue section; each entry has a paired *Speaker* field (`key.tag=`, empty for narration) with sensible defaults (e.g. `hypno_start_mod.4` → `Woman`)
 - City Events tab (Snapshot!, Pack Type = Events only) — Backgrounds and Overlays with live image/video preview, reorder buttons, and a 3-pane Dialog editor (scene list / node list / node form)
   - Scene list: *New Scene…* creates a blank scene by name (no file needed); *Import Scene…* imports existing dialog JSON files from disk and auto-locates/registers any background/overlay assets the imported scene's own node commands reference; a *Template* dropdown (backed by `city_events_templates.json`, editable and shareable) plus *Add From Template* creates a scene pre-filled with starter content; right-click context menu offers New Scene…, Import Scene…, Rename…, Delete, and Save As Template… (which appends the selected scene's content back into the templates file)
   - Node form includes speaker dropdown (extended with `Schoolgirl`, `Teacher`, `Trio`), text, flow references (Next/Branch/Action) as dropdowns, and a command table with context-sensitive argument dropdowns and image/video browse/preview
-  - **Dialog Graph** button opens a visual node-graph editor where each node is a draggable coloured box with colour-coded arrows for the three flow connections (Next/Branch/Action)
+  - **Dialog Graph** button opens a visual node-graph editor where each node is a draggable coloured box with colour-coded arrows for the three flow connections (Next/Branch/Action); hold *Shift* and drag to rubber-band select multiple nodes, then *Ctrl+C*/*Ctrl+V* (or the Copy/Paste toolbar buttons) to duplicate them — pasted nodes keep their text/commands but have flow references cleared so they never silently merge into the existing branch
   - **Dialog Player** ("Test…") opens a step-through playback window that renders a composite preview of background, overlay, and dialog text box; `mod_overlayImage3` video overlays are decoded frame-by-frame and painted into the same composite canvas (so they never obscure the player-choice buttons) and loop continuously while active
   - Export-time validation blocks on flow-ref errors and warns on missing `endEvent`; warning dialog offers a checkbox to auto-inject `endEvent` into all affected scenes; a separate advisory warns if a pack has City Events content but Pack Type isn't set to Events
 - Cutscenes tab — hidden (no released pack format supports cutscenes yet; will be re-enabled when the game defines the format)
 - Love Lens tab (Snapshot!, Pack Type = Love Lens only) — tabbed Character Setup, 2D Overlay Slots, Texture Slots, and Result Photos (including the optional `Double Shot` result-photo type)
 - **Orphaned Files tab** — shows assets on disk that are not referenced by the pack (orphaned) and references in the ini that point to missing files (broken); for Events-type packs, broken references also include `mod_overlayImage3` and audio commands (`playSound`, `playSoundDelayed`, `stopLoopedSound`) referenced inside dialog scenes that resolve to neither a pack asset nor a builtin game asset; image preview for orphaned files; JSON dialog file preview (pretty-printed); delete orphaned files from disk; tab is hidden automatically when there is nothing to show
 - Plugin system — drop Python packages into `plugins/` to extend the application
+  - **Manage Plugins…** (Tools menu) lists every discovered plugin with an enable/disable checkbox, persisted to `plugin_config.json`; disabled plugins are skipped on the next restart
+- **Undo / Redo** (Edit menu, Ctrl+Z / Ctrl+Y) — a periodic snapshot timer captures the in-memory pack state so edits across Photos, Events, Love Lens, and the Dialog Graph can be undone/redone within the session
+- **Auto-backup** — every *Save* also writes a timestamped copy to a `.backups/` folder beside the pack file (keeps the last 10); *File → Restore Previous Version…* lists them and restores one
+- **Recent packs** — *File → Open Recent* remembers the last 10 opened/saved pack JSON files
+- **Export as ZIP** — *File → Export Bonus Content as ZIP…* packages the exported BonusContent folder the same way official packs ship: contents wrapped in a top-level `<PackName>/` folder, plus a game-specific `README.txt` and a SHA-256 `manifest.json`, both at the zip root
+- **Pack tools** (Tools menu)
+  - *Find Duplicate Assets…* — hashes every photo/overlay/texture/event asset referenced by the pack and flags identical files
+  - *Compare Packs…* — picks two saved pack JSON files and reports added/removed/changed photos, events, and pack-info fields
+  - *Pack Statistics…* — counts of photos by position/type/color, missing-trait warnings, and event counts
 - Statusbar with live validation feedback
 - Menubar with File / Edit / Tools / Help menus
 - Double-click any image preview to open a zoomable full-resolution viewer; the viewer has a button to open the file in the system default editor
@@ -92,7 +103,15 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_cu128_installer.exe`. The frozen 
 │   │   ├── image_viewer.py     Zoomable image viewer dialog; attach_viewer() helper
 │   │   └── style.qss           Application stylesheet (Catppuccin Mocha)
 │   └── modules/
-|       ├── pack_manager.py     Load / Save pack JSON; dirty tracking (`is_dirty`)
+|       ├── pack_manager.py     Load / Save pack JSON; dirty tracking (`is_dirty`); undo/redo (`push_history`/`undo`/`redo`); timestamped `.backups/` on save
+│       ├── history_manager.py  JSON-snapshot undo/redo stack used by pack_manager.py
+│       ├── recent_files.py     Recent-packs list (recent_packs.json)
+│       ├── asset_dedup.py      SHA-256 duplicate-asset finder
+│       ├── pack_diff.py        Pack-vs-pack JSON diff report
+│       ├── pack_stats.py       Photo/event statistics dashboard
+│       ├── zip_export.py       ZIP packaging (official folder layout + manifest.json)
+│       ├── readme_templates.py README.txt template per game
+│       ├── image_preprocess.py Pillow-based batch image resize/recompress
 │       ├── import_export.py    Import / Export bonus content
 │       ├── pack_info_widget.py Pack Info tab (identity, defaults, category, traits)
 │       ├── tooltips.py         Central tooltip registry
@@ -104,7 +123,8 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_cu128_installer.exe`. The frozen 
 │       ├── cutscene_widget.py  Cutscenes tab
 │       ├── love_lens.py        Love Lens tab
 │       ├── orphaned_files.py   Orphaned Files tab
-│       └── plugin_system.py    Plugin discovery and loader
+│       ├── plugin_system.py    Plugin discovery and loader; disabled-plugin persistence
+│       └── plugin_dialog.py    Manage Plugins enable/disable dialog
 ├── SConstruct                  SCons build script (freeze + docs → PDF + SFX installer)
 ├── LICENSE                     MIT license
 ├── tests/                      pytest test suite

@@ -24,3 +24,10 @@ venv\Scripts\python.exe -m pip install -r plugins\my_plugin\requirements.txt
 . Some plugins (e.g. diffusion backends for the AI Image Generator) only
   become active once their required files are present — the corresponding
   UI elements appear or hide automatically.
+
+=== Enabling and Disabling Plugins
+
+*Tools → Manage Plugins…* lists every plugin found in `plugins\` with a checkbox.
+Unchecking a plugin disables it; it is skipped on the next application start instead of being deleted from disk.
+Re-check it (and restart) to re-enable it.
+The choice is stored in `plugin_config.json` next to `registry.json`.

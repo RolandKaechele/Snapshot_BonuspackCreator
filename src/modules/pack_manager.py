@@ -1,6 +1,8 @@
 """Pack manager — Load and Save the pack project JSON."""
 
 import copy
+import datetime
+import glob
 import json
 import os
 import shutil
@@ -8,6 +10,10 @@ import tempfile
 from typing import Any
 
 from app_debug import dlog as _dlog
+from modules.history_manager import HistoryManager
+
+_BACKUP_DIR_NAME = ".backups"
+_MAX_BACKUPS = 10
 
 # Photo/image-path fields that get relative/absolute conversion on save/load.
 _PATH_LIST_KEYS = ("overlays", "textures", "love_lens_photos")
@@ -84,6 +90,7 @@ class PackManager:
         self._data: dict[str, Any] = {}
         self._path: str | None = None
         self._dirty: bool = False
+        self.history = HistoryManager()
         self.new_pack()
 
     # ── Public API ──────────────────────────────────────────────────────────
@@ -114,7 +121,36 @@ class PackManager:
         self._data = self._make_dirty_dict(copy.deepcopy(_EMPTY_PACK))
         self._path = None
         self._dirty = False
+        self.history.reset(self._data)
         _dlog("PackManager.new_pack", "In-memory pack reset")
+
+    def push_history(self) -> None:
+        """Snapshot the current state for undo/redo (no-op if unchanged)."""
+        self.history.snapshot(self._data)
+
+    def undo(self) -> bool:
+        snap = self.history.undo()
+        if snap is None:
+            return False
+        self._data = self._make_dirty_dict(snap)
+        self._dirty = True
+        _dlog("PackManager.undo", "Restored previous state")
+        return True
+
+    def redo(self) -> bool:
+        snap = self.history.redo()
+        if snap is None:
+            return False
+        self._data = self._make_dirty_dict(snap)
+        self._dirty = True
+        _dlog("PackManager.redo", "Restored next state")
+        return True
+
+    def can_undo(self) -> bool:
+        return self.history.can_undo()
+
+    def can_redo(self) -> bool:
+        return self.history.can_redo()
 
     def load(self, path: str) -> None:
         with open(path, encoding="utf-8") as f:
@@ -127,6 +163,7 @@ class PackManager:
         self._data = self._make_dirty_dict(merged)
         self._path = path
         self._dirty = False
+        self.history.reset(self._data)
         _dlog("PackManager.load", f"Loaded {path}")
 
     def save(self, path: str) -> None:
@@ -138,7 +175,62 @@ class PackManager:
             json.dump(to_dump, f, indent=2, ensure_ascii=False)
         self._path = path
         self._dirty = False
+        self._write_backup(path)
         _dlog("PackManager.save", f"Saved {path}")
+
+    def _write_backup(self, path: str) -> None:
+        """Copy the just-saved pack file into a timestamped backups folder,
+        keeping only the last _MAX_BACKUPS copies."""
+        pack_dir = os.path.dirname(os.path.abspath(path))
+        backup_dir = os.path.join(pack_dir, _BACKUP_DIR_NAME)
+        os.makedirs(backup_dir, exist_ok=True)
+        stem = os.path.splitext(os.path.basename(path))[0]
+        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = os.path.join(backup_dir, f"{stem}_{stamp}.json")
+        try:
+            shutil.copy2(path, backup_path)
+        except OSError as exc:
+            _dlog("PackManager._write_backup", f"backup copy failed: {exc}")
+            return
+        backups = self.list_backups(path)
+        for old in backups[_MAX_BACKUPS:]:
+            try:
+                os.remove(old["path"])
+            except OSError:
+                pass
+
+    @staticmethod
+    def list_backups(path: str) -> list[dict[str, Any]]:
+        """Return [{'path', 'timestamp'}, ...] for *path*'s pack, newest first."""
+        pack_dir = os.path.dirname(os.path.abspath(path))
+        stem = os.path.splitext(os.path.basename(path))[0]
+        backup_dir = os.path.join(pack_dir, _BACKUP_DIR_NAME)
+        pattern = os.path.join(backup_dir, f"{stem}_*.json")
+        found = []
+        for bp in glob.glob(pattern):
+            try:
+                mtime = os.path.getmtime(bp)
+            except OSError:
+                continue
+            found.append({"path": bp, "timestamp": datetime.datetime.fromtimestamp(mtime)})
+        found.sort(key=lambda e: e["timestamp"], reverse=True)
+        return found
+
+    def restore_backup(self, backup_path: str) -> None:
+        """Load *backup_path*'s content but keep the current pack's save path,
+        so the next Save overwrites the original file with the restored content."""
+        keep_path = self._path
+        with open(backup_path, encoding="utf-8") as f:
+            loaded: dict[str, Any] = json.load(f)
+        merged = dict(_EMPTY_PACK)
+        merged.update(loaded)
+        pack_dir = os.path.dirname(os.path.abspath(keep_path)) if keep_path else os.path.dirname(os.path.abspath(backup_path))
+        self._resolve_relative_paths(merged, pack_dir)
+        self._data = self._make_dirty_dict(merged)
+        self._path = keep_path
+        self._dirty = True
+        self.history.reset(self._data)
+        _dlog("PackManager.restore_backup", f"Restored {backup_path}")
 
     @staticmethod
     def _to_relative(path: str, pack_dir: str) -> str:

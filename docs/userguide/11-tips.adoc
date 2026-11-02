@@ -9,3 +9,6 @@
 * *Overwrite text* — start with a capital letter to match the game's display style.
 * *Changing game type* — switching between Snapshot!, Lewd Shores, and Naughty Nightmares resets all loaded images and settings; export your pack first.
 * *Error dialogs* — every warning and error dialog has a *Copy to Clipboard* button so you can paste the full message when asking for support.
+* *Undo/Redo* — Ctrl+Z/Ctrl+Y undo and redo recent edits across Photos, Events, Love Lens, and the Dialog Graph within the current session; history is cleared on New Pack/Open/Import.
+* *Lost your changes?* — every *Save* also writes a timestamped backup to a `.backups\` folder beside the pack file; use *File → Restore Previous Version…* to recover one.
+* *Sharing a pack* — use *File → Export Bonus Content as ZIP…* to get a single file matching the official pack layout (with a per-game `README.txt` and a checksum `manifest.json`) that's ready to upload or share directly.

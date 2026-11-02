@@ -6,12 +6,13 @@ node updates its rect in the shared nodes list; the existing list/form panel
 stays in sync because both views share the same list object.
 """
 
+import copy
 import math
 
 from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal  # type: ignore
 from PyQt6.QtGui import (  # type: ignore
     QColor, QPen, QBrush, QPainter, QPainterPath, QPolygonF, QFont,
-    QTransform, QWheelEvent, QKeyEvent,
+    QTransform, QWheelEvent, QKeyEvent, QKeySequence,
 )
 from PyQt6.QtWidgets import (  # type: ignore
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGraphicsScene,
@@ -263,6 +264,7 @@ class _GraphView(QGraphicsView):
         self.setBackgroundBrush(QColor("#1a1a1a"))
         self.setStyleSheet("border:0;")
         self._zoom_level = 1.0
+        self.owner = None  # set by DialogGraphWidget after construction
 
     @property
     def zoom_level(self) -> float:
@@ -283,10 +285,25 @@ class _GraphView(QGraphicsView):
         factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
         self.apply_zoom(factor)
 
+    def mousePressEvent(self, event) -> None:
+        # Hold Shift to rubber-band select multiple nodes; plain left-drag still pans.
+        if (event.button() == Qt.MouseButton.LeftButton
+                and event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        super().mouseReleaseEvent(event)
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_F:
             self.fitInView(self.scene().itemsBoundingRect(),
                            Qt.AspectRatioMode.KeepAspectRatio)
+        elif event.matches(QKeySequence.StandardKey.Copy) and self.owner is not None:
+            self.owner.copy_selected()
+        elif event.matches(QKeySequence.StandardKey.Paste) and self.owner is not None:
+            self.owner.paste_clipboard()
         else:
             super().keyPressEvent(event)
 
@@ -306,14 +323,17 @@ class DialogGraphWidget(QWidget):
     """
 
     node_selected = pyqtSignal(int)
+    nodes_changed = pyqtSignal()  # emitted after copy/paste structurally changes the node list
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._nodes: list   = []
         self._node_items: dict[int, NodeItem] = {}
         self._edge_items:  list[EdgeItem]     = []
+        self._clipboard: list[dict] = []
         self._scene = QGraphicsScene(self)
         self._view  = _GraphView(self._scene)
+        self._view.owner = self
         self._selected_idx: int = -1
         self._build_ui()
 
@@ -407,6 +427,40 @@ class DialogGraphWidget(QWidget):
     def _zoom(self, factor: float) -> None:
         self._view.apply_zoom(factor)
 
+    # ── Copy / Paste ────────────────────────────────────────────────────
+
+    def selected_indices(self) -> list[int]:
+        return [idx for idx, item in self._node_items.items() if item.isSelected()]
+
+    def copy_selected(self) -> None:
+        """Copy the currently selected nodes' data (not flow refs) to an internal clipboard."""
+        indices = self.selected_indices()
+        if not indices:
+            return
+        self._clipboard = [copy.deepcopy(self._nodes[i]) for i in sorted(indices)]
+        _dlog("DialogGraphWidget.copy_selected", f"copied {len(indices)} node(s)")
+
+    def paste_clipboard(self) -> None:
+        """Append clipboard nodes as new nodes, offset and with flow refs cleared
+        (pasted nodes never auto-link into the existing flow, by design—the
+        user rewires them manually to avoid silently merging dialog branches)."""
+        if not self._clipboard:
+            return
+        new_indices: list[int] = []
+        for node in self._clipboard:
+            new_node = copy.deepcopy(node)
+            for field, _, _ in _PORTS:
+                new_node[field] = -1
+            x, y = new_node.get("rect", [0, 0])
+            new_node["rect"] = [x + 30, y + 30]
+            self._nodes.append(new_node)
+            new_indices.append(len(self._nodes) - 1)
+        self._rebuild()
+        for idx, item in self._node_items.items():
+            item.setSelected(idx in new_indices)
+        self.nodes_changed.emit()
+        _dlog("DialogGraphWidget.paste_clipboard", f"pasted {len(new_indices)} node(s)")
+
     # ── Auto-layout ───────────────────────────────────────────────────────
 
     def _auto_layout(self) -> None:
@@ -482,6 +536,7 @@ class DialogGraphWindow(QDialog):
     """
 
     node_selected = pyqtSignal(int)
+    nodes_changed = pyqtSignal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -494,6 +549,7 @@ class DialogGraphWindow(QDialog):
         )
         self._graph = DialogGraphWidget(self)
         self._graph.node_selected.connect(self.node_selected)
+        self._graph.nodes_changed.connect(self.nodes_changed)
         self._build_ui()
 
     # ── UI ────────────────────────────────────────────────────────────────
@@ -516,6 +572,16 @@ class DialogGraphWindow(QDialog):
         btn_layout.setFixedWidth(96)
         btn_layout.setToolTip("Arrange nodes by flow order")
         btn_layout.clicked.connect(self._graph._auto_layout)
+
+        btn_copy = QPushButton("Copy")
+        btn_copy.setFixedWidth(60)
+        btn_copy.setToolTip("Copy selected nodes  (Ctrl+C). Hold Shift and drag to select multiple.")
+        btn_copy.clicked.connect(self._graph.copy_selected)
+
+        btn_paste = QPushButton("Paste")
+        btn_paste.setFixedWidth(60)
+        btn_paste.setToolTip("Paste copied nodes as new, unlinked nodes  (Ctrl+V)")
+        btn_paste.clicked.connect(self._graph.paste_clipboard)
 
         btn_zo = QPushButton("−")
         btn_zo.setFixedSize(26, 26)
@@ -553,6 +619,9 @@ class DialogGraphWindow(QDialog):
 
         toolbar.addWidget(btn_fit)
         toolbar.addWidget(btn_layout)
+        toolbar.addSpacing(12)
+        toolbar.addWidget(btn_copy)
+        toolbar.addWidget(btn_paste)
         toolbar.addSpacing(12)
         toolbar.addWidget(btn_zo)
         toolbar.addWidget(self._lbl_zoom)

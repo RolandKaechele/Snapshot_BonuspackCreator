@@ -130,6 +130,11 @@ Each dialog node appears as a draggable coloured box; arrows show the three flow
 Dragging a node updates its stored position, which is preserved in the exported `.json` file.
 The graph view and the node list stay in sync because they share the same node list object — edits in either view are reflected immediately in the other.
 
+Hold *Shift* and drag on empty canvas to rubber-band select multiple nodes (a plain drag still pans the view).
+With nodes selected, press *Ctrl+C* (or the *Copy* toolbar button) to copy them, then *Ctrl+V* (or *Paste*) to insert duplicates offset slightly from the originals.
+Pasted nodes keep their speaker, text, and commands but have their Next/Branch/Action references cleared, so they never silently merge into the existing flow — rewire them manually afterwards.
+The *Auto-layout* button re-arranges every node into a top-down flow order based on its Next/Branch/Action connections.
+
 ==== Dialog Player
 
 Click *Play…* to open the Dialog Player window.

@@ -31,6 +31,15 @@ snapshot_pack_creator_V1_9/
 │   │   └── style.qss
 │   └── modules/
 │       ├── pack_manager.py
+│       ├── history_manager.py   ← JSON-snapshot undo/redo stack (NEW)
+│       ├── recent_files.py      ← recent-packs list, recent_packs.json (NEW)
+│       ├── asset_dedup.py       ← SHA-256 duplicate-asset finder (NEW)
+│       ├── pack_diff.py         ← pack-vs-pack JSON diff report (NEW)
+│       ├── pack_stats.py        ← photo/event statistics dashboard (NEW)
+│       ├── zip_export.py        ← ZIP packaging, official folder layout (NEW)
+│       ├── readme_templates.py  ← README.txt template per game (NEW)
+│       ├── image_preprocess.py  ← Pillow batch resize/recompress (NEW)
+│       ├── plugin_dialog.py     ← Manage Plugins enable/disable dialog (NEW)
 │       ├── import_export.py
 │       ├── pack_info_widget.py  ← Pack Info tab (NEW)
 │       ├── tooltips.py          ← central tooltip registry (NEW)

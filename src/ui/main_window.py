@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import ( #type: ignore
     QMainWindow, QTabWidget, QWidget, QVBoxLayout,
     QStatusBar,
 )
-from PyQt6.QtCore import Qt #type: ignore
+from PyQt6.QtCore import Qt, QTimer #type: ignore
 
 from app_debug import dlog as _dlog
 from ui.menubar import build_menubar
@@ -24,6 +24,7 @@ from modules.love_lens import LoveLensWidget
 from modules.orphaned_files import OrphanedFilesWidget
 from modules.plugin_system import PluginSystem
 from modules.ai_image_gen import get_torch_info
+from modules.recent_files import load_recent, add_recent
 
 
 class MainWindow(QMainWindow):
@@ -50,6 +51,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(title)
 
         self._statusbar_ctrl.set_info("Ready. Open or create a pack to begin.")
+
+        # Periodic undo/redo snapshot — coalesces rapid edits into one history step
+        # since many widgets mutate nested pack data without going through mark_dirty().
+        self._history_timer = QTimer(self)
+        self._history_timer.setInterval(800)
+        self._history_timer.timeout.connect(self._pack_manager.push_history)
+        self._history_timer.start()
+
         _dlog("MainWindow.__init__", "Window ready")
 
     def _build_ui(self) -> None:
@@ -103,6 +112,7 @@ class MainWindow(QMainWindow):
         try:
             self._pack_manager.load(path)
             self._refresh_all()
+            add_recent(path)
             self._statusbar_ctrl.set_ok(f"Loaded: {os.path.basename(path)}")
             _dlog("MainWindow.on_open_pack", f"Loaded {path}")
         except Exception as exc:
@@ -116,6 +126,7 @@ class MainWindow(QMainWindow):
             return
         try:
             self._pack_manager.save(self._pack_manager.current_path)
+            add_recent(self._pack_manager.current_path)
             self._statusbar_ctrl.set_ok("Pack saved.")
         except Exception as exc:
             show_error(self, "Save Failed", str(exc), exc=exc,
@@ -131,6 +142,7 @@ class MainWindow(QMainWindow):
             return
         try:
             self._pack_manager.save(path)
+            add_recent(path)
             self._statusbar_ctrl.set_ok(f"Saved: {os.path.basename(path)}")
         except Exception as exc:
             show_error(self, "Save Failed", str(exc), exc=exc,
@@ -143,6 +155,93 @@ class MainWindow(QMainWindow):
     def on_export_bonus_content(self) -> None:
         self._import_export.run_export()
 
+    def on_export_bonus_content_zip(self) -> None:
+        self._import_export.run_export(also_zip=True)
+
+    # ── Recent files ─────────────────────────────────────────────────────
+
+    def on_populate_recent_menu(self) -> None:
+        self._recent_menu.clear()
+        recents = load_recent()
+        if not recents:
+            self._recent_menu.addAction("(No recent packs)").setEnabled(False)
+            return
+        for path in recents:
+            action = self._recent_menu.addAction(path)
+            action.triggered.connect(lambda checked=False, p=path: self._on_open_recent(p))
+
+    def _on_open_recent(self, path: str) -> None:
+        if not os.path.exists(path):
+            show_warning(self, "File Not Found", f"Pack file no longer exists:\n{path}",
+                        tag="MainWindow._on_open_recent")
+            return
+        if self._pack_manager.is_dirty:
+            from ui.dialogs import show_confirm #type: ignore
+            if not show_confirm(self, "Open Recent Pack",
+                               "This will clear the current pack. Continue?",
+                               tag="MainWindow._on_open_recent"):
+                return
+        try:
+            self._pack_manager.load(path)
+            self._refresh_all()
+            add_recent(path)
+            self._statusbar_ctrl.set_ok(f"Loaded: {os.path.basename(path)}")
+        except Exception as exc:
+            show_error(self, "Open Failed", str(exc), exc=exc,
+                       tag="MainWindow._on_open_recent")
+            self._statusbar_ctrl.set_error(f"Failed to load: {exc}")
+
+    # ── Backups ──────────────────────────────────────────────────────────
+
+    def on_restore_backup(self) -> None:
+        path = self._pack_manager.current_path
+        if not path:
+            show_info(self, "Restore Previous Version",
+                      "Save the pack at least once before restoring a backup.",
+                      tag="MainWindow.on_restore_backup")
+            return
+        backups = self._pack_manager.list_backups(path)
+        if not backups:
+            show_info(self, "Restore Previous Version", "No backups found for this pack yet.",
+                      tag="MainWindow.on_restore_backup")
+            return
+        from PyQt6.QtWidgets import QInputDialog #type: ignore
+        labels = [b["timestamp"].strftime("%Y-%m-%d %H:%M:%S") for b in backups]
+        label, ok = QInputDialog.getItem(
+            self, "Restore Previous Version", "Choose a backup to restore:", labels, 0, False)
+        if not ok or not label:
+            return
+        backup = backups[labels.index(label)]
+        from ui.dialogs import show_confirm #type: ignore
+        if not show_confirm(self, "Restore Previous Version",
+                           f"Restore the pack to the version from {label}?\n"
+                           "Unsaved changes in the current pack will be lost.",
+                           tag="MainWindow.on_restore_backup"):
+            return
+        try:
+            self._pack_manager.restore_backup(backup["path"])
+            self._refresh_all()
+            self._statusbar_ctrl.set_ok(f"Restored backup from {label}")
+        except Exception as exc:
+            show_error(self, "Restore Failed", str(exc), exc=exc,
+                       tag="MainWindow.on_restore_backup")
+
+    # ── Undo / Redo ──────────────────────────────────────────────────────
+
+    def on_undo(self) -> None:
+        if self._pack_manager.undo():
+            self._refresh_all()
+            self._statusbar_ctrl.set_ok("Undo.")
+        else:
+            self._statusbar_ctrl.set_info("Nothing to undo.")
+
+    def on_redo(self) -> None:
+        if self._pack_manager.redo():
+            self._refresh_all()
+            self._statusbar_ctrl.set_ok("Redo.")
+        else:
+            self._statusbar_ctrl.set_info("Nothing to redo.")
+
     # ── Edit menu handlers ──────────────────────────────────────────────────
 
     def on_settings(self) -> None:
@@ -151,26 +250,59 @@ class MainWindow(QMainWindow):
     # ── Tools menu handlers ─────────────────────────────────────────
 
     def on_manage_plugins(self) -> None:
-        names = self._plugin_system.loaded_plugin_names()
-        if not names:
-            info = "No plugins loaded."
-        else:
-            lines = []
-            for name in names:
-                meta = self._plugin_system.plugin_info(name)
-                line = name
-                if meta.get("version"):
-                    line += f"  v{meta['version']}"
-                if meta.get("description"):
-                    line += f"\n    {meta['description']}"
-                lines.append(line)
-            info = "\n".join(lines)
-        show_info(self, "Loaded Plugins", info, tag="MainWindow.on_manage_plugins")
+        from modules.plugin_dialog import PluginManagerDialog
+        PluginManagerDialog(self, self._plugin_system).exec()
 
     def on_edit_prompts(self) -> None:
         from modules.prompt_editor_dialog import PromptEditorDialog
         game = self._pack_manager.get("game", "")
         PromptEditorDialog(self, initial_game=game).exec()
+
+    # ── Analysis tools ───────────────────────────────────────────────────
+
+    def on_find_duplicates(self) -> None:
+        from modules.asset_dedup import find_duplicate_assets
+        groups = find_duplicate_assets(self._pack_manager.data)
+        if not groups:
+            show_info(self, "Find Duplicate Assets", "No duplicate assets found in this pack.",
+                      tag="MainWindow.on_find_duplicates")
+            return
+        lines = []
+        for group in groups:
+            lines.append("Duplicate group:")
+            lines.extend(f"  \u2022 {label}  ({path})" for label, path in group)
+            lines.append("")
+        show_info(self, "Find Duplicate Assets", "\n".join(lines).strip(),
+                  tag="MainWindow.on_find_duplicates")
+
+    def on_compare_packs(self) -> None:
+        from PyQt6.QtWidgets import QFileDialog #type: ignore
+        path_a, _ = QFileDialog.getOpenFileName(self, "Select First Pack", "", "Pack JSON (*.json)")
+        if not path_a:
+            return
+        path_b, _ = QFileDialog.getOpenFileName(self, "Select Second Pack", "", "Pack JSON (*.json)")
+        if not path_b:
+            return
+        try:
+            import json
+            from modules.pack_diff import diff_packs
+            with open(path_a, encoding="utf-8") as f:
+                data_a = json.load(f)
+            with open(path_b, encoding="utf-8") as f:
+                data_b = json.load(f)
+            report = diff_packs(data_a, data_b)
+            show_info(self, "Compare Packs",
+                      f"{os.path.basename(path_a)}  vs  {os.path.basename(path_b)}\n\n{report}",
+                      tag="MainWindow.on_compare_packs")
+        except Exception as exc:
+            show_error(self, "Compare Packs Failed", str(exc), exc=exc,
+                       tag="MainWindow.on_compare_packs")
+
+    def on_pack_statistics(self) -> None:
+        from modules.pack_stats import compute_stats, format_stats_report
+        stats = compute_stats(self._pack_manager.data)
+        show_info(self, "Pack Statistics", format_stats_report(stats),
+                  tag="MainWindow.on_pack_statistics")
 
     # ── Help menu handlers ──────────────────────────────────────────────────
 

@@ -4,6 +4,8 @@
 
 Called once at startup with the `MainWindow` instance as `app`.
 
+NOTE: Users can disable your plugin from *Tools → Manage Plugins…* without uninstalling it (stored in `plugin_config.json`). A disabled plugin is skipped entirely — `register(app)` does not run until the user re-enables it and restarts the application.
+
 [cols="1,1,3"]
 |===
 | Parameter | Type | Description

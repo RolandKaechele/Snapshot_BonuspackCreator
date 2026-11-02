@@ -37,4 +37,10 @@ Use `tmp_path` for any test that reads or writes files.
 
 | `test_event_widget.py`
 | `_extract_nodes`, `_write_nodes`, `_remap_refs`, `_node_label`, `validate_events` — all pure functions, no Qt required
+
+| `test_roundtrip_import_export.py`
+| Export → import → export round-trip; asserts photo assets stay byte-identical (SHA-256) and traits survive the cycle
+
+| `test_zip_export.py`
+| `export_folder_as_zip` — official `<PackName>/` wrapper layout, `README.txt`/`manifest.json` placement at the zip root; `build_readme()` per-game wording
 |===

@@ -971,6 +971,8 @@ class EventWidget(QWidget):
                     self._dlg_graph_win = DialogGraphWindow(self.window())
                     self._dlg_graph_win.node_selected.connect(
                         self._on_graph_node_selected)
+                    self._dlg_graph_win.nodes_changed.connect(
+                        self._on_graph_nodes_changed)
                     # uncheck button when window is closed by the user
                     self._dlg_graph_win.finished.connect(
                         lambda: self._btn_graph_toggle.setChecked(False))
@@ -1486,6 +1488,13 @@ class EventWidget(QWidget):
         self._node_list.blockSignals(False)
         self._loading = False
         self._on_node_selected(idx)
+
+    def _on_graph_nodes_changed(self) -> None:
+        """Called after a copy/paste in the graph canvas adds new nodes."""
+        self._serialize_dialog()
+        self._rebuild_node_list(keep_row=len(self._current_nodes) - 1)
+        if self._dlg_graph_win:
+            self._dlg_graph_win.refresh_edges()
 
     def _on_node_selected(self, row: int) -> None:
         if row < 0 or row >= len(self._current_nodes):

@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import ( #type: ignore
     QLineEdit, QSizePolicy,
 )
 from PyQt6.QtGui import QPixmap, QIcon #type: ignore
+from PyQt6.QtGui import QPixmap, QIcon #type: ignore
 from PyQt6.QtCore import Qt, QSize #type: ignore
 
 from app_debug import dlog as _dlog
@@ -191,6 +192,11 @@ class PictureWidget(QWidget):
         self._btn_naming_help = QPushButton("Naming Conventions…")
         self._btn_naming_help.setFixedWidth(150)
         self._btn_naming_help.clicked.connect(self._on_show_naming_conventions)
+        self._btn_preprocess = QPushButton("Preprocess…")
+        self._btn_preprocess.setFixedWidth(100)
+        self._btn_preprocess.setToolTip(
+            "Resize/compress selected photos (or all photos, if none selected) on disk.")
+        self._btn_preprocess.clicked.connect(self._on_preprocess_images)
         self._lbl_count = QLabel("0 images")
         self._cmb_display_size = QComboBox()
         for label, _ in _DISPLAY_SIZES:
@@ -200,12 +206,23 @@ class PictureWidget(QWidget):
         toolbar.addWidget(self._btn_remove)
         toolbar.addWidget(self._btn_ai)
         toolbar.addWidget(self._btn_naming_help)
+        toolbar.addWidget(self._btn_preprocess)
         toolbar.addStretch()
         toolbar.addWidget(QLabel("Size:"))
         toolbar.addWidget(self._cmb_display_size)
         toolbar.addSpacing(8)
         toolbar.addWidget(self._lbl_count)
         root.addLayout(toolbar)
+
+        filter_bar = QHBoxLayout()
+        filter_bar.setSpacing(4)
+        filter_bar.addWidget(QLabel("Filter:"))
+        self._edit_filter = QLineEdit()
+        self._edit_filter.setPlaceholderText("Filter by filename, position, type or color…")
+        self._edit_filter.setClearButtonEnabled(True)
+        self._edit_filter.textChanged.connect(self._rebuild_list)
+        filter_bar.addWidget(self._edit_filter, 1)
+        root.addLayout(filter_bar)
 
         # Splitter: list left, detail + preview right
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -217,6 +234,8 @@ class PictureWidget(QWidget):
         self._list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self._list.itemSelectionChanged.connect(self._on_selection_changed)
         splitter.addWidget(self._list)
+        # Maps visible list rows -> indices into pm.data["photos"] when a filter is active.
+        self._row_to_index: list[int] = []
 
         # Right panel
         right = QWidget()
@@ -312,6 +331,7 @@ class PictureWidget(QWidget):
         )
         if not paths:
             return
+        self._edit_filter.clear()
         self._add_image_paths(paths, auto_detect_position=True)
 
     def _on_show_naming_conventions(self) -> None:
@@ -338,6 +358,56 @@ class PictureWidget(QWidget):
             wtype = "photos"
         open_ai_generate_dialog(self, wtype, self._on_ai_accepted, output_dir=None)
 
+    def _on_preprocess_images(self) -> None:
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox #type: ignore
+        from ui.dialogs import show_confirm, show_info
+
+        selected_rows = [
+            self._row_to_index[self._list.row(item)]
+            for item in self._list.selectedItems()
+            if 0 <= self._list.row(item) < len(self._row_to_index)
+        ]
+        photos: list = self._pm.data.get("photos", [])
+        targets = [photos[r] for r in selected_rows] if selected_rows else list(photos)
+        if not targets:
+            show_info(self, "Preprocess Images", "No photos in this pack.",
+                      tag="PictureWidget._on_preprocess_images")
+            return
+
+        max_width, ok = QInputDialog.getInt(
+            self, "Preprocess Images", "Max width in pixels (0 = no limit):",
+            0, 0, 8192, 1)
+        if not ok:
+            return
+        max_height, ok = QInputDialog.getInt(
+            self, "Preprocess Images", "Max height in pixels (0 = no limit):",
+            0, 0, 8192, 1)
+        if not ok:
+            return
+        quality, ok = QInputDialog.getInt(
+            self, "Preprocess Images", "JPEG/PNG quality (1-100, 100 = no recompression):",
+            85, 1, 100, 1)
+        if not ok:
+            return
+
+        if not show_confirm(
+            self, "Preprocess Images",
+            f"This will resize/compress {len(targets)} image file(s) on disk in place.\n"
+            "This cannot be undone. Continue?",
+            tag="PictureWidget._on_preprocess_images"):
+            return
+
+        from modules.image_preprocess import preprocess_image_file
+        changed = 0
+        for photo in targets:
+            src = photo.get("source")
+            if src and preprocess_image_file(
+                src, max_width or None, max_height or None, quality):
+                changed += 1
+        self._rebuild_list()
+        show_info(self, "Preprocess Images", f"{changed} of {len(targets)} image(s) updated.",
+                  tag="PictureWidget._on_preprocess_images")
+
     def update_ai_availability(self) -> None:
         """Hide the AI Generate button when no diffusion plugin is available."""
         from modules.ai_image_gen import has_any_backend
@@ -345,6 +415,7 @@ class PictureWidget(QWidget):
 
     def _on_ai_accepted(self, type_map: dict) -> None:
         default_type = "none" if self._pm.get("game") == "lewdshores" else "plain"
+        self._edit_filter.clear()
         # Move selected images from temp into the pack folder right away.
         pack_path = self._pm.current_path
         pack_dir = os.path.dirname(pack_path) if pack_path else None
@@ -417,6 +488,9 @@ class PictureWidget(QWidget):
             return
         photos: list = self._pm.data.get("photos", [])
         for row in rows:
+            if not (0 <= row < len(self._row_to_index)):
+                continue
+            row = self._row_to_index[row]
             if not (0 <= row < len(photos)):
                 continue
             source = photos[row].get("source")
@@ -457,6 +531,10 @@ class PictureWidget(QWidget):
             self._preview_label.setPixmap(QPixmap())
             return
         row = self._list.row(selected[0])
+        if not (0 <= row < len(self._row_to_index)):
+            self._set_detail_enabled(False)
+            return
+        row = self._row_to_index[row]
         if row < 0 or row >= len(photos):
             self._set_detail_enabled(False)
             return
@@ -483,7 +561,11 @@ class PictureWidget(QWidget):
         return match if match is not None else (cur_text or None)
 
     def _on_trait_changed(self) -> None:
-        selected_rows = [self._list.row(item) for item in self._list.selectedItems()]
+        selected_rows = [
+            self._row_to_index[self._list.row(item)]
+            for item in self._list.selectedItems()
+            if 0 <= self._list.row(item) < len(self._row_to_index)
+        ]
         photos: list = self._pm.data.get("photos", [])
         if not selected_rows:
             return
@@ -644,9 +726,17 @@ class PictureWidget(QWidget):
             self._list.setWrapping(False)
         photos: list = self._pm.data.get("photos", [])
         self._list.clear()
-        for photo in photos:
+        filter_text = self._edit_filter.text().strip().lower() if hasattr(self, "_edit_filter") else ""
+        self._row_to_index = []
+        for idx, photo in enumerate(photos):
             label = os.path.splitext(
                 os.path.basename(photo.get("source") or photo.get("name", "")))[0]
+            if filter_text:
+                haystack = " ".join(str(photo.get(f, "")) for f in (
+                    "name", "position", "type", "color", "overwrite_type", "overwrite_color",
+                )) + " " + label
+                if filter_text not in haystack.lower():
+                    continue
             item = QListWidgetItem(label)
             pix = load_pixmap(photo.get("source")) if photo.get("source") else QPixmap()
             if not pix.isNull():
@@ -656,7 +746,8 @@ class PictureWidget(QWidget):
                     Qt.TransformationMode.SmoothTransformation,
                 )))
             self._list.addItem(item)
-        self._lbl_count.setText(f"{len(photos)} images")
+            self._row_to_index.append(idx)
+        self._lbl_count.setText(f"{len(self._row_to_index)} of {len(photos)} images")
 
     def _set_detail_enabled(self, enabled: bool, multi: bool = False) -> None:
         for w in (self._cmb_position, self._cmb_type, self._cmb_color_special,

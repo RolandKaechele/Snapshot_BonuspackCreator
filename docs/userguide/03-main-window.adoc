@@ -6,6 +6,25 @@ The main window is divided into:
 * **Tab bar** — one tab per feature area
 * **Status bar** — live feedback and validation messages
 
+=== Menu Bar
+
+[cols="1,3"]
+|===
+| Menu | Notable items
+
+| File
+| New/Open/Save/Save As; *Restore Previous Version…* (pick from the last 10 auto-backups); *Open Recent* (last 10 opened/saved packs); Import/Export Bonus Content; *Export Bonus Content as ZIP…*
+
+| Edit
+| *Undo* (Ctrl+Z) / *Redo* (Ctrl+Y); Settings…
+
+| Tools
+| Manage Plugins…; Edit AI Prompts…; *Find Duplicate Assets…*; *Compare Packs…*; *Pack Statistics…*
+
+| Help
+| About…
+|===
+
 Tabs that are not supported by the selected game are hidden automatically.
 Choosing *Lewd Shores* or *Naughty Nightmares* on the Pack Info tab hides City Events, Cutscenes, and Love Lens.
 *Naughty Nightmares* additionally locks Pack Type to *Photos*, since Events and Love Lens packs are not supported for that game.
