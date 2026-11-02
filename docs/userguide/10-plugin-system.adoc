@@ -27,7 +27,27 @@ venv\Scripts\python.exe -m pip install -r plugins\my_plugin\requirements.txt
 
 === Enabling and Disabling Plugins
 
-*Tools → Manage Plugins…* lists every plugin found in `plugins\` with a checkbox.
-Unchecking a plugin disables it; it is skipped on the next application start instead of being deleted from disk.
-Re-check it (and restart) to re-enable it.
+*Tools → Manage Plugins…* lists every plugin found in `plugins\` in a table, one row per plugin:
+
+[cols="1,3"]
+|===
+| Column | Meaning
+
+| Enabled
+| Checkbox — unchecking disables the plugin; it is skipped on the next application start instead of being deleted from disk
+
+| Name
+| The plugin's package/module name (matches its folder name under `plugins\`)
+
+| Version
+| The plugin's `__version__` string, if it declares one (`—` otherwise)
+
+| Status
+| `Enabled`, `Disabled`, or `Failed to load` (check `--debug` console output for the error)
+
+| Description
+| The first line of the plugin's module docstring
+|===
+
+Re-check a disabled plugin (and restart) to re-enable it.
 The choice is stored in `plugin_config.json` next to `registry.json`.

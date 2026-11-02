@@ -3,8 +3,8 @@
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import ( #type: ignore
-    QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
-    QPushButton, QLabel, QCheckBox,
+    QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
+    QPushButton, QLabel, QCheckBox, QHeaderView, QAbstractItemView, QWidget,
 )
 from PyQt6.QtCore import Qt #type: ignore
 
@@ -13,9 +13,12 @@ from modules.plugin_system import load_disabled_plugins, save_disabled_plugins
 if TYPE_CHECKING:
     from modules.plugin_system import PluginSystem
 
+_COL_ENABLED, _COL_NAME, _COL_VERSION, _COL_STATUS, _COL_DESCRIPTION = range(5)
+
 
 class PluginManagerDialog(QDialog):
-    """Lists discovered plugins with an enable/disable checkbox per plugin.
+    """Table of discovered plugins — name, version, load status, description,
+    and an enable/disable checkbox per plugin.
 
     Changes are persisted to plugin_config.json and take effect on next
     application restart (plugins are only loaded once, at startup).
@@ -24,7 +27,7 @@ class PluginManagerDialog(QDialog):
     def __init__(self, parent, plugin_system: "PluginSystem") -> None:
         super().__init__(parent)
         self.setWindowTitle("Manage Plugins")
-        self.resize(480, 360)
+        self.resize(720, 360)
         self._plugin_system = plugin_system
         self._disabled = load_disabled_plugins()
         self._build_ui()
@@ -36,23 +39,58 @@ class PluginManagerDialog(QDialog):
             "restart the app for changes to take effect."
         ))
 
-        self._list = QListWidget()
-        names = self._plugin_system.discovered_plugin_names()
+        self._table = QTableWidget(0, 5)
+        self._table.setHorizontalHeaderLabels(
+            ["Enabled", "Name", "Version", "Status", "Description"])
+        self._table.verticalHeader().setVisible(False)
+        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        header = self._table.horizontalHeader()
+        header.setSectionResizeMode(_COL_ENABLED, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(_COL_NAME, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(_COL_VERSION, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(_COL_STATUS, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(_COL_DESCRIPTION, QHeaderView.ResizeMode.Stretch)
+
         loaded = set(self._plugin_system.loaded_plugin_names())
-        for name in sorted(names):
-            item = QListWidgetItem()
-            self._list.addItem(item)
-            checkbox = QCheckBox(name)
-            checkbox.setChecked(name not in self._disabled)
+        names = sorted(self._plugin_system.discovered_plugin_names())
+        self._table.setRowCount(len(names))
+        for row, name in enumerate(names):
+            is_disabled = name in self._disabled
+            is_loaded = name in loaded
+
+            checkbox = QCheckBox()
+            checkbox.setChecked(not is_disabled)
+            cell = QWidget()
+            cell_layout = QHBoxLayout(cell)
+            cell_layout.addWidget(checkbox)
+            cell_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            cell_layout.setContentsMargins(0, 0, 0, 0)
+            self._table.setCellWidget(row, _COL_ENABLED, cell)
+
+            self._table.setItem(row, _COL_NAME, QTableWidgetItem(name))
+
             meta = self._plugin_system.plugin_info(name)
-            tip = meta.get("description", "")
-            if name not in loaded and name not in self._disabled:
-                tip = (tip + "\n" if tip else "") + "(failed to load — see debug log)"
-            if tip:
-                checkbox.setToolTip(tip)
-            item.setData(Qt.ItemDataRole.UserRole, name)
-            self._list.setItemWidget(item, checkbox)
-        layout.addWidget(self._list, 1)
+            version_item = QTableWidgetItem(meta.get("version", "") or "\u2014")
+            version_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._table.setItem(row, _COL_VERSION, version_item)
+
+            if is_disabled:
+                status = "Disabled"
+            elif is_loaded:
+                status = "Enabled"
+            else:
+                status = "Failed to load"
+            status_item = QTableWidgetItem(status)
+            status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._table.setItem(row, _COL_STATUS, status_item)
+
+            description = meta.get("description", "")
+            if not is_loaded and not is_disabled:
+                description = (description + " " if description else "") + "(see debug log)"
+            self._table.setItem(row, _COL_DESCRIPTION, QTableWidgetItem(description))
+
+        layout.addWidget(self._table, 1)
 
         buttons = QHBoxLayout()
         btn_close = QPushButton("Close")
@@ -63,11 +101,12 @@ class PluginManagerDialog(QDialog):
 
     def _on_close(self) -> None:
         disabled: set[str] = set()
-        for row in range(self._list.count()):
-            item = self._list.item(row)
-            name = item.data(Qt.ItemDataRole.UserRole)
-            checkbox = self._list.itemWidget(item)
-            if isinstance(checkbox, QCheckBox) and not checkbox.isChecked():
+        for row in range(self._table.rowCount()):
+            name = self._table.item(row, _COL_NAME).text()
+            cell = self._table.cellWidget(row, _COL_ENABLED)
+            checkbox = cell.findChild(QCheckBox) if cell else None
+            if checkbox is not None and not checkbox.isChecked():
                 disabled.add(name)
         save_disabled_plugins(disabled)
         self.accept()
+

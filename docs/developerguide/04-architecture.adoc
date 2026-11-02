@@ -44,7 +44,7 @@ Every `PackManager.save()` also writes a timestamped copy of the just-saved JSON
 === Plugin Enable/Disable
 
 `modules/plugin_system.py` reads `src/plugin_config.json` (`load_disabled_plugins()`) before importing each discovered module in `load_plugins()`, skipping any module name listed under `"disabled"`.
-`modules/plugin_dialog.py`'s `PluginManagerDialog` (opened via `Tools → Manage Plugins…`) lists every *discovered* plugin (not just loaded ones) with a checkbox, and writes the unchecked set back via `save_disabled_plugins()` on close.
+`modules/plugin_dialog.py`'s `PluginManagerDialog` (opened via `Tools → Manage Plugins…`) shows every *discovered* plugin (not just loaded ones) in a table with Enabled / Name / Version / Status / Description columns, and writes the unchecked set back via `save_disabled_plugins()` on close.
 Changes take effect on the next restart, since plugins are only imported once at startup.
 
 === Module Map
@@ -102,7 +102,7 @@ Changes take effect on the next restart, since plugins are only imported once at
 | `preprocess_image_file(path, max_width, max_height, quality)` — Pillow in-place downscale/recompress, never upscales
 
 | `modules/plugin_dialog.py`
-| `PluginManagerDialog` — enable/disable checkbox list for discovered plugins, persisted via `plugin_system.save_disabled_plugins()`
+| `PluginManagerDialog` — table of discovered plugins (Enabled checkbox / Name / Version / Status / Description), enable/disable persisted via `plugin_system.save_disabled_plugins()`
 
 | `modules/import_export.py`
 | `ImportExportManager` — reads `pack.ini` folders (all ini merged); detects `gameID`/`plugID`; parses `[Defaults]` and `[Events]` into structured fields; writes split export folders; see <<import-export-internals>> for details

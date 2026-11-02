@@ -38,7 +38,7 @@ The function is called once at startup after the main window is fully built.
 
 === Verifying Your Plugin Loaded
 
-Go to *Tools → Manage Plugins…* — the dialog lists all successfully loaded plugin names.
+Go to *Tools → Manage Plugins…* — the table's *Status* column shows `Enabled` for every plugin whose `register(app)` ran successfully (and `Failed to load` if it didn't).
 
 Alternatively, launch with `--debug` and watch the console:
 
