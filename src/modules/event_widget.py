@@ -45,7 +45,7 @@ _KNOWN_CMDS = [
     "showImage", "noImage",
     "mod_showImage", "hideUI", "showUI",
     "showEventPhoto", "noPhoto",
-    "noOverlayImage", "mod_overlayImage3",
+    "noOverlayImage", "mod_overlayImage1", "mod_overlayImage2", "mod_overlayImage3",
     "endEvent",
     "playSound", "playSoundDelayed", "stopLoopedSound", "pulseBackground",
     "alleyAmbience",
@@ -55,11 +55,17 @@ _KNOWN_CMDS = [
 
 
 # Commands whose Argument is an image/video asset name
-_IMAGE_CMDS = {"showImage", "mod_showImage", "showEventPhoto", "mod_overlayImage3", "mod_addEventSellablePhoto"}
+_IMAGE_CMDS = {
+    "showImage", "mod_showImage", "showEventPhoto",
+    "mod_overlayImage1", "mod_overlayImage2", "mod_overlayImage3",
+    "mod_addEventSellablePhoto",
+}
 
 # Split of _IMAGE_CMDS by which slot they populate at runtime (see dialog_player._show_node)
 _BG_IMAGE_CMDS = {"showImage", "mod_showImage", "showEventPhoto", "mod_addEventSellablePhoto"}
-_OV_IMAGE_CMDS = {"mod_overlayImage3"}
+# mod_overlayImage1/2 are independent layers shown together (Lewd Shores beach events,
+# e.g. bottom+top overlays); mod_overlayImage3 is the single legacy Snapshot overlay slot.
+_OV_IMAGE_CMDS = {"mod_overlayImage1", "mod_overlayImage2", "mod_overlayImage3"}
 
 # Extensions checked when locating an image/video asset referenced by an imported scene
 _ASSET_EXTS = (".png", ".jpg", ".jpeg", ".dat", ".jpa", ".pna", ".bytes", ".byte")
@@ -634,9 +640,17 @@ class EventWidget(QWidget):
         return page
 
     def _reload_scene_templates(self) -> None:
-        """(Re)populate the scene-template combo from city_events_templates.json."""
+        """(Re)populate the scene-template combo from city_events_templates.json.
+
+        Templates tagged with a "game" key only show up for that game; untagged
+        templates are generic and show up for every game.
+        """
+        game = self._pm.data.get("game", "snapshot")
         self._cmb_scene_template.clear()
         for template in city_events_templates.load_templates():
+            template_game = template.get("game")
+            if template_game and template_game != game:
+                continue
             label = template.get("name", "Untitled")
             description = template.get("description", "")
             self._cmb_scene_template.addItem(label, template)
@@ -1115,7 +1129,10 @@ class EventWidget(QWidget):
             description, ok = QInputDialog.getText(page, "Save As Template", "Template description (optional):")
             if not ok:
                 return
-            city_events_templates.add_template(name.strip(), dialog, description.strip())
+            game = self._pm.data.get("game", "snapshot")
+            city_events_templates.add_template(
+                name.strip(), dialog, description.strip(),
+                game=game if game == "lewdshores" else None)
             self._reload_scene_templates()
 
         def _on_scene_context_menu(pos) -> None:
@@ -1267,7 +1284,7 @@ class EventWidget(QWidget):
             _add(None, [e.get("name", "") for e in events
                         if e.get("type") == "dialog" and e.get("name")])
             return opts
-        if cmd == "mod_overlayImage3":
+        if cmd in ("mod_overlayImage1", "mod_overlayImage2", "mod_overlayImage3"):
             names = []
             data_dir = os.path.join(self._resolve_pack_folder(), "Data")
             if os.path.isdir(data_dir):
@@ -1852,6 +1869,7 @@ class EventWidget(QWidget):
         self._cmb_event_type.blockSignals(True)
         self._cmb_event_type.setCurrentIndex(idx if idx >= 0 else 0)
         self._cmb_event_type.blockSignals(False)
+        self._reload_scene_templates()
         self._rebuild_lists()
         # Switch to first populated sub-tab
         events: list = self._pm.data.get("events", [])

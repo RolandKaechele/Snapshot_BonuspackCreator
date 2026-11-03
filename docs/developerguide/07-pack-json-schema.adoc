@@ -85,7 +85,7 @@ All keys that appear in `PackManager._EMPTY_PACK` are guaranteed to be present a
 
 | `events`
 | `list[dict]`
-| City event backgrounds and dialog JSON entries
+| City/Beach event backgrounds, overlays, and dialog JSON entries
 
 | `cutscenes`
 | `list[dict]`

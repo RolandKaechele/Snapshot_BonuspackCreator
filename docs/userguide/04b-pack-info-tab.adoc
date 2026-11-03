@@ -16,7 +16,7 @@ It is divided into three sub-tabs.
 | Display name shown in the game's collection screen
 
 | Game
-| Target game — *Snapshot!*, *Lewd Shores*, or *Naughty Nightmares*. Selecting Lewd Shores hides the Snapshot!-only tabs (City Events, Cutscenes, Love Lens). Selecting Naughty Nightmares locks Pack Type to *Photos* (Events and Love Lens are not supported for that game).
+| Target game — *Snapshot!*, *Lewd Shores*, or *Naughty Nightmares*. Selecting Lewd Shores hides the Snapshot!-only Cutscenes and Love Lens tabs, and relabels City Events to *Beach Events* (Pack Type entry included). Selecting Naughty Nightmares locks Pack Type to *Photos* and hides City Events, Cutscenes, and Love Lens (Events and Love Lens are not supported for that game).
 
 | Pack Type
 | *Photos*, *Events*, or *Love Lens*. Only *Photos* is available when Game is set to *Naughty Nightmares*.

@@ -33,10 +33,18 @@ def load_templates(path: str | None = None) -> list[dict]:
     return [t for t in templates if isinstance(t, dict) and "name" in t and "dialog" in t]
 
 
-def add_template(name: str, dialog: dict, description: str = "", path: str | None = None) -> None:
-    """Append a new template to the templates file, creating it if missing."""
+def add_template(name: str, dialog: dict, description: str = "", path: str | None = None,
+                  game: str | None = None) -> None:
+    """Append a new template to the templates file, creating it if missing.
+
+    *game*, when set (e.g. "lewdshores"), restricts the template to that game's
+    City/Beach Events tab; leave None for a generic template shown for every game.
+    """
     path = path or default_template_file()
     templates = load_templates(path)
-    templates.append({"name": name, "description": description, "dialog": dialog})
+    entry = {"name": name, "description": description, "dialog": dialog}
+    if game:
+        entry["game"] = game
+    templates.append(entry)
     with open(path, "w", encoding="utf-8") as fh:
         json.dump({"templates": templates}, fh, ensure_ascii=False, indent=2)

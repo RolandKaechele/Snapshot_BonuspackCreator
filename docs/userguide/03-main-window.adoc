@@ -26,9 +26,9 @@ The main window is divided into:
 |===
 
 Tabs that are not supported by the selected game are hidden automatically.
-Choosing *Lewd Shores* or *Naughty Nightmares* on the Pack Info tab hides City Events, Cutscenes, and Love Lens.
+Choosing *Lewd Shores* hides Cutscenes and Love Lens, and relabels the City Events tab to *Beach Events* (shown when Pack Type = Events, same as Snapshot!). Choosing *Naughty Nightmares* hides City Events, Cutscenes, and Love Lens.
 *Naughty Nightmares* additionally locks Pack Type to *Photos*, since Events and Love Lens packs are not supported for that game.
-The tabs reappear instantly when you switch back to *Snapshot!*.
+The tabs reappear/relabel instantly when you switch games.
 
 == Tabs
 
@@ -49,8 +49,8 @@ The tabs reappear instantly when you switch back to *Snapshot!*.
 | Both
 
 | City Events
-| Scripted events with dialog JSON and backgrounds
-| Snapshot! only
+| Scripted events with dialog JSON and backgrounds; relabelled *Beach Events* for Lewd Shores, including two independent overlay layers (bottom + top)
+| Snapshot!, Naughty Nightmares, Lewd Shores
 
 | Cutscenes
 | Frame-sequence cutscene preview and metadata

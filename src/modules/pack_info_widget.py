@@ -478,6 +478,9 @@ class PackInfoWidget(QWidget):
         Lens are hidden (and locked to Photos) when that game is selected.
         """
         options = _NAUGHTY_NIGHTMARES_PACK_TYPES if game == "naughtynightmares" else _ALL_PACK_TYPES
+        if game == "lewdshores":
+            options = [("Beach Events", key) if key == "events" else (label, key)
+                       for label, key in options]
         keys = [key for _, key in options]
 
         current_key = self._pm.get("pack_type", "photos")

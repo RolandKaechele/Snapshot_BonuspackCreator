@@ -22,7 +22,8 @@ _COLOR_ACTION = "#ff8844"
 # Image-command keys whose value is an asset stem to preview
 _IMAGE_CMDS = frozenset({
     "showImage", "mod_showImage", "showEventPhoto",
-    "mod_overlayImage3", "mod_addEventSellablePhoto",
+    "mod_overlayImage1", "mod_overlayImage2", "mod_overlayImage3",
+    "mod_addEventSellablePhoto",
 })
 
 # Speaker-header background colours (same palette as dialog_graph)
@@ -80,7 +81,7 @@ def _resolve_image(stem: str, pack_dir: str, game: str = "snapshot") -> str:
 
 
 class _CompositePanel(QWidget):
-    """Single canvas: background, overlay, and dialog text box painted together."""
+    """Single canvas: background, overlay(s), and dialog text box painted together."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -90,6 +91,13 @@ class _CompositePanel(QWidget):
         self._ov_pix:   QPixmap | None = None
         self._bg_label  = ""
         self._ov_label  = ""
+        # Independent image-only overlay layers for mod_overlayImage1 (bottom)
+        # and mod_overlayImage2 (top), shown together — used by Lewd Shores
+        # beach events. Painted below/above the legacy _ov_pix/video slot (3).
+        self._ov1_pix:   QPixmap | None = None
+        self._ov1_label  = ""
+        self._ov2_pix:   QPixmap | None = None
+        self._ov2_label  = ""
         self._dlg_tag   = ""
         self._dlg_text  = ""
         self._dlg_bg    = "#3a3a3a"
@@ -139,6 +147,17 @@ class _CompositePanel(QWidget):
         self._ov_label = stem
         self.update()
 
+    def set_overlay_layer(self, layer: int, path: str, stem: str = "") -> None:
+        """Set the image-only overlay layer 1 (bottom) or 2 (top). No video support."""
+        pix = load_pixmap(path) if (path and os.path.isfile(path)) else QPixmap()
+        if layer == 1:
+            self._ov1_pix = pix if not pix.isNull() else None
+            self._ov1_label = stem
+        elif layer == 2:
+            self._ov2_pix = pix if not pix.isNull() else None
+            self._ov2_label = stem
+        self.update()
+
     def set_dialog(self, tag: str, text: str, tag_bg: str) -> None:
         self._dlg_tag  = tag
         self._dlg_text = text
@@ -146,13 +165,31 @@ class _CompositePanel(QWidget):
         self.update()
 
     def clear(self) -> None:
-        self._bg_pix = self._ov_pix = None
-        self._bg_label = self._ov_label = ""
+        self._bg_pix = self._ov_pix = self._ov1_pix = self._ov2_pix = None
+        self._bg_label = self._ov_label = self._ov1_label = self._ov2_label = ""
         self._dlg_tag = self._dlg_text = ""
         self._ov_player.stop()
         self._ov_player.setSource(QUrl())
         self._ov_video_frame = None
         self.update()
+
+    def _draw_layer(self, p: QPainter, rect, pix: QPixmap | None, label: str) -> None:
+        if pix and not pix.isNull():
+            scaled = pix.scaled(
+                rect.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            x = (rect.width()  - scaled.width())  // 2
+            y = (rect.height() - scaled.height()) // 2
+            p.drawPixmap(x, y, scaled)
+        elif label:
+            p.setPen(QColor("#887755"))
+            p.drawText(
+                QRect(0, rect.height() - 24, rect.width(), 22),
+                Qt.AlignmentFlag.AlignCenter,
+                f"overlay: {label} (not found)",
+            )
 
     def paintEvent(self, event) -> None:
         p = QPainter(self)
@@ -175,7 +212,12 @@ class _CompositePanel(QWidget):
             p.drawText(rect, Qt.AlignmentFlag.AlignCenter,
                        f"bg: {self._bg_label}\n(not found)")
 
-        # Overlay video frame (takes priority when playing) or static image
+        # Bottom/top overlay layers (mod_overlayImage1/2, Lewd Shores beach events)
+        self._draw_layer(p, rect, self._ov1_pix, self._ov1_label)
+        self._draw_layer(p, rect, self._ov2_pix, self._ov2_label)
+
+        # Legacy single overlay slot (mod_overlayImage3): video frame takes
+        # priority when playing, otherwise a static image.
         ov_pix = QPixmap.fromImage(self._ov_video_frame) if self._ov_video_frame is not None else self._ov_pix
         if ov_pix and not ov_pix.isNull():
             scaled = ov_pix.scaled(
@@ -223,6 +265,8 @@ class DialogPlayerWindow(QDialog):
         self._game: str = "snapshot"
         self._current_bg: str = ""
         self._current_ov: str = ""
+        self._current_ov1: str = ""
+        self._current_ov2: str = ""
         self._sound_player = QMediaPlayer()
         self._sound_audio = QAudioOutput()
         self._sound_player.setAudioOutput(self._sound_audio)
@@ -370,6 +414,8 @@ class DialogPlayerWindow(QDialog):
         self._game = game
         self._current_bg = ""
         self._current_ov = ""
+        self._current_ov1 = ""
+        self._current_ov2 = ""
         self._sound_player.stop()
         self._current = max(0, min(start_index, len(nodes) - 1)) if nodes else 0
         title = f"Dialog Test — {scene_name}" if scene_name else "Dialog Test"
@@ -420,12 +466,16 @@ class DialogPlayerWindow(QDialog):
         self._current = 0
         self._current_bg = ""
         self._current_ov = ""
+        self._current_ov1 = ""
+        self._current_ov2 = ""
         self._show_node()
 
     def _replay_image_state_to(self, target_idx: int) -> None:
-        """Rebuild _current_bg/_current_ov by replaying the history path up to target."""
+        """Rebuild _current_bg/_current_ov(1/2) by replaying the history path up to target."""
         self._current_bg = ""
         self._current_ov = ""
+        self._current_ov1 = ""
+        self._current_ov2 = ""
         for idx in list(self._history) + [target_idx]:
             if 0 <= idx < len(self._nodes):
                 for v in self._nodes[idx].get("vars", []):
@@ -437,8 +487,12 @@ class DialogPlayerWindow(QDialog):
                         self._current_bg = ""
                     elif k == "mod_overlayImage3":
                         self._current_ov = val
-                    elif k == "noOverlayImage":
-                        self._current_ov = ""
+                    elif k == "mod_overlayImage1":
+                        self._current_ov1 = val
+                    elif k == "mod_overlayImage2":
+                        self._current_ov2 = val
+                    elif k in ("noOverlayImage", "endEvent"):
+                        self._current_ov = self._current_ov1 = self._current_ov2 = ""
 
     # ── Rendering ─────────────────────────────────────────────────────────
 
@@ -493,8 +547,12 @@ class DialogPlayerWindow(QDialog):
                 self._current_bg = ""
             elif k == "mod_overlayImage3":
                 self._current_ov = val
-            elif k == "noOverlayImage":
-                self._current_ov = ""
+            elif k == "mod_overlayImage1":
+                self._current_ov1 = val
+            elif k == "mod_overlayImage2":
+                self._current_ov2 = val
+            elif k in ("noOverlayImage", "endEvent"):
+                self._current_ov = self._current_ov1 = self._current_ov2 = ""
             elif k in ("playSound", "playSoundDelayed"):
                 self._play_sound(val)
             elif k == "stopLoopedSound":
@@ -511,6 +569,10 @@ class DialogPlayerWindow(QDialog):
             _resolve_image(self._current_bg, self._pack_dir, self._game), self._current_bg)
         self._composite.set_overlay(
             _resolve_image(self._current_ov, self._pack_dir, self._game), self._current_ov)
+        self._composite.set_overlay_layer(
+            1, _resolve_image(self._current_ov1, self._pack_dir, self._game), self._current_ov1)
+        self._composite.set_overlay_layer(
+            2, _resolve_image(self._current_ov2, self._pack_dir, self._game), self._current_ov2)
         self._composite.set_dialog(tag, text, _tag_bg(tag))
 
         # Flow buttons + player choice buttons

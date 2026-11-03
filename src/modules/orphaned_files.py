@@ -116,7 +116,7 @@ def _collect_broken(data: dict) -> list[str]:
 
 
 def _collect_broken_scene_assets(data: dict, folder: str) -> list[str]:
-    """Return labels for mod_overlayImage3/audio-command references in city-event
+    """Return labels for overlay/audio-command references in city/beach-event
     dialog scenes that resolve to neither a pack asset nor a builtin game asset."""
     if data.get("pack_type") != "events":
         return []

@@ -338,8 +338,10 @@ class MainWindow(QMainWindow):
 
     def _on_game_changed(self, game: str) -> None:
         snapshot_only = game in ("snapshot", "naughtynightmares")
+        events_capable = game in ("snapshot", "naughtynightmares", "lewdshores")
         pack_type = self._pack_manager.get("pack_type", "photos")
-        self._tabs.setTabVisible(3, snapshot_only and pack_type == "events")    # City Events
+        self._tabs.setTabText(3, "Beach Events" if game == "lewdshores" else "City Events")
+        self._tabs.setTabVisible(3, events_capable and pack_type == "events")   # City/Beach Events
         self._tabs.setTabVisible(5, snapshot_only and pack_type == "lovelens")  # Love Lens
 
     def _refresh_all(self) -> None:

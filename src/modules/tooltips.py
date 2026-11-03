@@ -179,13 +179,15 @@ TIPS: dict[str, str] = {
         "Known commands:\n"
         "  showImage / noImage         — show or hide the background image\n"
         "  showEventPhoto / noPhoto    — show or hide an event photo\n"
-        "  noOverlayImage              — hide the overlay image\n"
-        "  mod_overlayImage3           — show overlay image slot 3\n"
+        "  noOverlayImage              — hide all overlay image layers\n"
+        "  mod_overlayImage3           — show overlay image slot 3 (single overlay, supports video)\n"
+        "  mod_overlayImage1 / 2       — show bottom/top overlay layers together\n"
+        "                                (Lewd Shores beach events; images only)\n"
         "  playSound / stopLoopedSound — play or stop a sound (argument = sound name)\n"
         "  pulseBackground             — flash/pulse the background\n"
         "  mascotMoan1 / mascotMoan2   — trigger mascot moan animations\n"
         "  suckLoop                    — trigger looped suck animation\n"
-        "  endEvent                    — end the city event\n"
+        "  endEvent                    — end the event\n"
         "  mod_addEventSellablePhoto   — register a sellable photo for this event"
     ),
 
