@@ -132,6 +132,16 @@ class ImportExportManager:
 
         # Advisory checks: rare-photo cap (Snapshot) and Love Lens slot completeness.
         extra_warnings: list[str] = []
+        from modules.issue_report import detect_id_range_too_small
+        range_too_small = detect_id_range_too_small(pm.data)
+        if range_too_small:
+            extra_warnings.append(
+                f"Declared ID Range ({range_too_small['id_range']}) only covers "
+                f"{range_too_small['range_width']} ID(s), but this pack has "
+                f"{range_too_small['photo_count']} photo(s).\n"
+                "Photos beyond the range will receive IDs that collide with whatever "
+                "pack reserves the next range. Widen the ID Range on the Pack Info tab."
+            )
         if pm.get("pack_type", "photos") != "events" and pm.data.get("events"):
             extra_warnings.append(
                 "This pack has City Events content (backgrounds, overlays, or dialog scenes) "

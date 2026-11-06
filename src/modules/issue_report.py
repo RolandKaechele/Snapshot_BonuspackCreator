@@ -154,6 +154,35 @@ def detect_position_mismatches(pack_data: dict) -> list[dict]:
     return results
 
 
+def detect_id_range_too_small(pack_data: dict) -> dict | None:
+    """Return ``{'id_range', 'range_width', 'photo_count'}`` when the declared
+    ``idrange`` is narrower than the pack's photo count (photos beyond the
+    range would collide with the next pack's reserved IDs), else ``None``.
+
+    Skipped for already-split multi-ini imports (``special_types_parts`` /
+    ``special_colors_parts`` present): there, ``id_range`` only reflects the
+    first part's range while photos span every part, each with its own
+    (separately valid) range that isn't retained on ``pack_data``.
+    """
+    if "special_types_parts" in pack_data or "special_colors_parts" in pack_data:
+        return None
+
+    from modules.photo_registry import parse_id_range
+
+    photo_count = len([p for p in pack_data.get("photos", []) if p.get("name")])
+    if photo_count == 0:
+        return None
+    id_range = pack_data.get("id_range", "").strip()
+    parsed = parse_id_range(id_range)
+    if parsed is None:
+        return None
+    start, end = parsed
+    range_width = end - start + 1
+    if range_width < photo_count:
+        return {"id_range": id_range, "range_width": range_width, "photo_count": photo_count}
+    return None
+
+
 def detect_id_conflicts(pack_data: dict) -> tuple[list[dict], bool]:
     """Return (conflicts, registry_available). Each conflict dict has
     'photo_id', 'photo_name', 'other_pack_name' — IDs this pack would assign
@@ -213,6 +242,7 @@ def generate_issue_report_markdown(pack_data: dict) -> str:
         )
     broken = sorted(set(_collect_broken(pack_data) + _collect_broken_scene_assets(pack_data, source_folder)))
     id_conflicts, registry_available = detect_id_conflicts(pack_data)
+    range_too_small = detect_id_range_too_small(pack_data)
 
     lines: list[str] = []
     lines.append(f"# Issue Report — {title}")
@@ -252,6 +282,16 @@ def generate_issue_report_markdown(pack_data: dict) -> str:
         lines.append("")
         lines.append(
             "Skipped: no photo ID registry found. Run `tools\\scan_photo_registry.py` to build one.")
+        lines.append("")
+
+    if range_too_small:
+        lines.append("## ID Range Too Small")
+        lines.append("")
+        lines.append(
+            f"Declared `idrange={range_too_small['id_range']}` only covers "
+            f"{range_too_small['range_width']} ID(s), but the pack has "
+            f"{range_too_small['photo_count']} photo(s). Photos beyond the range will "
+            "receive IDs that collide with whatever pack reserves the next range.")
         lines.append("")
 
     if broken:
@@ -295,7 +335,7 @@ def generate_issue_report_markdown(pack_data: dict) -> str:
                 lines.append(f"**Note:** {note}")
             lines.append("")
 
-    if not (mismatches or id_conflicts or broken or orphaned or flagged):
+    if not (mismatches or id_conflicts or range_too_small or broken or orphaned or flagged):
         lines.append("No issues found.")
         lines.append("")
 
