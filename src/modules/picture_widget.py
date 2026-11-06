@@ -104,18 +104,14 @@ LEWD_SPECIALS = [
 
 # Naughty Nightmares-specific suggested Position/Type/Color lists — a distinct,
 # horror-themed vocabulary, not the base Snapshot! list with extras appended.
-# Positions confirmed via binary string-literal extraction (see
-# docs/NaughtyNightmares_BonusPack_Analysis.md §8.2.1); types/colors merged from
-# the same confirmed fallback values plus the V2.7 browser prototype's `ssnm`
-# suggested combo lists (see docs/ArchiveFeatureComparison.md § "Cross-reference:
-# ssnm suggested Position/Type/Color lists"). Combos stay editable either way.
+# Positions are the exact, 100%-confirmed `AllowedPositions` HashSet membership
+# recovered by decompiling `ModPhotoLoader..cctor` in Ghidra (see
+# docs/NaughtyNightmares_BonusPack_Analysis.md §8.2.2); types/colors are the same
+# confirmed `AllowedTypes`/`AllowedColors` HashSet membership from that section.
+# Combos stay editable either way.
 NAUGHTY_NIGHTMARES_POSITIONS = [
     ("ghostHands", "Ghost Hands"), ("demon", "Demon"), ("psycho", "Psycho"),
-    ("bench", "Bench Photo"), ("jogger", "Jogger Photo"), ("xray", "X-Ray"),
-    ("flasher", "Flasher"), ("window", "Window"), ("angry", "Busted Photo"),
-    ("police", "Police"), ("rJogger", "Signal Hijacker Jogger"),
-    ("hypno", "Love Lens Photo"), ("boss", "Boss"), ("ritual", "Ritual"),
-    ("tentacles", "Tentacles"),
+    ("bench", "Bench Photo"), ("benchPsycho", "Bench Psycho"), ("boss", "Boss"),
 ]
 
 NAUGHTY_NIGHTMARES_TYPES = [
