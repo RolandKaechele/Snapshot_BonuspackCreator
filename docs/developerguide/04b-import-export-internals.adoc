@@ -54,6 +54,10 @@ After reading all parts, `run_import` merges them:
 * `id` has trailing digits stripped (`"mypack1"` → `"mypack"`).
 * `title` has `" Part N"` suffix stripped.
 
+==== Import-time validation
+
+After the merged pack is loaded (`pm.data.update(pack_data)`) and views are refreshed, `_import_from_folder()` runs the same rare-photo cap check used by export: for `game in ("snapshot", "naughtynightmares")` with `pack_type == "photos"`, `modules.picture_widget.get_rare_photo_warning()` is called and, if it returns a message, shown via `show_warning()`. This is advisory only — the imported pack is left as-is; it simply surfaces that the game will silently downgrade excess `"rare"` photos to `"none"` at runtime.
+
 === Import from archive (`run_import_from_archive`)
 
 `run_import_from_archive()` mirrors `run_import()` but sources the pack folder from a `.zip`/`.rar` archive instead of an existing folder, via `modules/archive_import.extract_archive_to_temp()`:

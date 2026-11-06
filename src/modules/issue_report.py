@@ -183,6 +183,27 @@ def detect_id_range_too_small(pack_data: dict) -> dict | None:
     return None
 
 
+def detect_rare_photo_cap_exceeded(pack_data: dict) -> dict | None:
+    """Return ``{'rare_count', 'limit', 'photo_count'}`` when more photos are
+    marked ``'rare'`` than the game allows (``ceil(photo_count / 10)``), else
+    ``None``. Only enforced by Snapshot! and Naughty Nightmares photo packs —
+    mirrors ``modules.picture_widget.get_rare_photo_warning``."""
+    if pack_data.get("game", "snapshot") not in ("snapshot", "naughtynightmares"):
+        return None
+    if pack_data.get("pack_type", "photos") != "photos":
+        return None
+    import math
+    photos = pack_data.get("photos", [])
+    total = len(photos)
+    if total == 0:
+        return None
+    limit = math.ceil(total / 10)
+    rare_count = sum(1 for p in photos if p.get("color") == "rare")
+    if rare_count <= limit:
+        return None
+    return {"rare_count": rare_count, "limit": limit, "photo_count": total}
+
+
 def detect_id_conflicts(pack_data: dict) -> tuple[list[dict], bool]:
     """Return (conflicts, registry_available). Each conflict dict has
     'photo_id', 'photo_name', 'other_pack_name' — IDs this pack would assign
@@ -243,6 +264,7 @@ def generate_issue_report_markdown(pack_data: dict) -> str:
     broken = sorted(set(_collect_broken(pack_data) + _collect_broken_scene_assets(pack_data, source_folder)))
     id_conflicts, registry_available = detect_id_conflicts(pack_data)
     range_too_small = detect_id_range_too_small(pack_data)
+    rare_cap_exceeded = detect_rare_photo_cap_exceeded(pack_data)
 
     lines: list[str] = []
     lines.append(f"# Issue Report — {title}")
@@ -294,6 +316,16 @@ def generate_issue_report_markdown(pack_data: dict) -> str:
             "receive IDs that collide with whatever pack reserves the next range.")
         lines.append("")
 
+    if rare_cap_exceeded:
+        lines.append("## Rare Photo Cap Exceeded")
+        lines.append("")
+        lines.append(
+            f"{rare_cap_exceeded['rare_count']} photo(s) are marked 'rare', but this pack "
+            f"only allows {rare_cap_exceeded['limit']} "
+            f"(ceil({rare_cap_exceeded['photo_count']} photos / 10)). "
+            "Excess rare photos will be silently downgraded to 'none' by the game.")
+        lines.append("")
+
     if broken:
         lines.append(f"## Broken References ({len(broken)})")
         lines.append("")
@@ -335,7 +367,7 @@ def generate_issue_report_markdown(pack_data: dict) -> str:
                 lines.append(f"**Note:** {note}")
             lines.append("")
 
-    if not (mismatches or id_conflicts or range_too_small or broken or orphaned or flagged):
+    if not (mismatches or id_conflicts or range_too_small or rare_cap_exceeded or broken or orphaned or flagged):
         lines.append("No issues found.")
         lines.append("")
 

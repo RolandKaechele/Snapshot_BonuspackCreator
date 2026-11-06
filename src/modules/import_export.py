@@ -104,6 +104,14 @@ class ImportExportManager:
             self._parent._refresh_all()
             self._parent.status().set_ok(f"Imported: {os.path.basename(folder)}")
             _dlog("ImportExportManager.run_import", f"Imported {folder} ({len(ini_paths)} ini files)")
+
+            # Advisory check: rare-photo cap (Snapshot / Naughty Nightmares only).
+            if pm.get("game", "snapshot") in ("snapshot", "naughtynightmares") and pm.get("pack_type", "photos") == "photos":
+                from modules.picture_widget import get_rare_photo_warning
+                rare_msg = get_rare_photo_warning(pm.data)
+                if rare_msg:
+                    show_warning(self._parent, "Import Warning", rare_msg,
+                                 tag="ImportExportManager.run_import")
         except Exception as exc:
             show_error(self._parent, "Import Error", str(exc), exc=exc,
                        tag="ImportExportManager.run_import")

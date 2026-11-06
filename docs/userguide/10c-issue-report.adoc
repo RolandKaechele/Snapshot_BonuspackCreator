@@ -19,6 +19,9 @@ You'll be prompted for a save location; the file defaults to `<pack id>_issue_re
 | ID Range Too Small
 | The declared `idrange=` in Pack Info doesn't cover every photo in the pack (photos beyond the range would get IDs colliding with whatever pack reserves the next range). Skipped for already-split multi-part packs, where each part has its own (separately valid) range.
 
+| Rare Photo Cap Exceeded
+| More photos are marked `rare` than the game allows (`ceil(photo count / 10)`) — excess ones are silently downgraded to `none` at runtime. Only checked for Snapshot! and Naughty Nightmares Photos packs; same check shown as a warning on export and import.
+
 | Broken References
 | Filenames referenced by the pack (photos, overlays, textures, events, dialog scene commands) that don't exist on disk — the same check as the *Broken References* list on the xref:10b-orphaned-files-tab.adoc[Orphaned Files tab].
 

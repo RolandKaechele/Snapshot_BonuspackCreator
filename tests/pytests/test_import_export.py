@@ -358,6 +358,77 @@ def test_read_pack_ini_photo_source_set_when_dat_exists(tmp_path):
     assert data["photos"][0]["source"] is not None
 
 
+# ── ImportExportManager._import_from_folder — rare-photo cap warning ────────
+
+class _FakeStatus:
+    def set_ok(self, *_a, **_kw): pass
+    def set_error(self, *_a, **_kw): pass
+
+
+class _FakeParent:
+    def __init__(self):
+        from modules.pack_manager import PackManager
+        self._pack_manager = PackManager()
+
+    def status(self):
+        return _FakeStatus()
+
+    def _refresh_all(self):
+        pass
+
+
+def test_import_from_folder_warns_when_rare_over_limit(tmp_path, qapp, monkeypatch):  # noqa: ARG001
+    from modules.import_export import ImportExportManager
+
+    names = ",".join(f"pk{i}" for i in range(10))
+    lines = [
+        "[Mod]", "plugID=snapshot", "id=pk", "idrange=110000-110009", 'title="T"',
+        "[Photos]", f"names={names}",
+    ]
+    for i in range(10):
+        lines.append(f"pk{i}.position=upskirt")
+        lines.append(f"pk{i}.type=plain")
+        # 2 of 10 marked "rare" exceeds the ceil(10/10)=1 cap.
+        lines.append(f"pk{i}.color={'rare' if i < 2 else 'white'}")
+    (tmp_path / "pack.ini").write_text("\n".join(lines), encoding="utf-8")
+
+    warnings = []
+    monkeypatch.setattr(
+        "modules.import_export.show_warning",
+        lambda *a, **kw: warnings.append(a[2] if len(a) > 2 else kw.get("message")),
+    )
+
+    manager = ImportExportManager(_FakeParent())
+    manager._import_from_folder(str(tmp_path))
+
+    assert len(warnings) == 1
+    assert "2 photo(s)" in warnings[0]
+
+
+def test_import_from_folder_no_warning_within_limit(tmp_path, qapp, monkeypatch):  # noqa: ARG001
+    from modules.import_export import ImportExportManager
+
+    names = ",".join(f"pk{i}" for i in range(10))
+    lines = [
+        "[Mod]", "plugID=snapshot", "id=pk", "idrange=110000-110009", 'title="T"',
+        "[Photos]", f"names={names}",
+    ]
+    for i in range(10):
+        lines.append(f"pk{i}.position=upskirt")
+        lines.append(f"pk{i}.type=plain")
+        lines.append(f"pk{i}.color={'rare' if i < 1 else 'white'}")
+    (tmp_path / "pack.ini").write_text("\n".join(lines), encoding="utf-8")
+
+    warnings = []
+    monkeypatch.setattr("modules.import_export.show_warning", lambda *a, **kw: warnings.append(a))
+
+    manager = ImportExportManager(_FakeParent())
+    manager._import_from_folder(str(tmp_path))
+
+    assert warnings == []
+
+
+
 # ── _export_photo_files ──────────────────────────────────────────────────────
 
 def test_export_photo_files_copies_existing(tmp_path):
