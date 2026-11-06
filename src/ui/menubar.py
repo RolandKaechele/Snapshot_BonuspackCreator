@@ -48,6 +48,10 @@ def build_menubar(window: QMainWindow) -> None:
     act_import.triggered.connect(window.on_import_bonus_content)
     file_menu.addAction(act_import)
 
+    act_import_archive = QAction("Import Bonus Content from &Archive…", window)
+    act_import_archive.triggered.connect(window.on_import_bonus_content_from_archive)
+    file_menu.addAction(act_import_archive)
+
     act_export = QAction("&Export Bonus Content…", window)
     act_export.triggered.connect(window.on_export_bonus_content)
     file_menu.addAction(act_export)

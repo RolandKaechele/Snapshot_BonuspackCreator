@@ -38,6 +38,36 @@ class ImportExportManager:
         )
         if not folder:
             return
+        self._import_from_folder(folder)
+
+    def run_import_from_archive(self) -> None:
+        from ui.dialogs import show_confirm  # local import to avoid circular at module level
+        from modules.archive_import import extract_archive_to_temp, ArchiveImportError, ARCHIVE_FILTER
+        pm: "PackManager" = self._parent._pack_manager
+        if pm.is_dirty:
+            if not show_confirm(self._parent, "Import Bonus Content from Archive",
+                                "This will clear the current pack. Continue?",
+                                tag="ImportExportManager.run_import_from_archive"):
+                return
+        archive_path, _ = QFileDialog.getOpenFileName(
+            self._parent,
+            "Select Bonus Content Archive",
+            "",
+            ARCHIVE_FILTER,
+        )
+        if not archive_path:
+            return
+        try:
+            folder = extract_archive_to_temp(archive_path)
+        except ArchiveImportError as exc:
+            show_error(self._parent, "Import Error", str(exc),
+                       tag="ImportExportManager.run_import_from_archive")
+            self._parent.status().set_error(f"Import failed: {exc}")
+            return
+        self._import_from_folder(folder)
+
+    def _import_from_folder(self, folder: str) -> None:
+        pm: "PackManager" = self._parent._pack_manager
         ini_paths = _resolve_ini_paths(folder, self._parent)
         if not ini_paths:
             return

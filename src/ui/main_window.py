@@ -152,6 +152,9 @@ class MainWindow(QMainWindow):
     def on_import_bonus_content(self) -> None:
         self._import_export.run_import()
 
+    def on_import_bonus_content_from_archive(self) -> None:
+        self._import_export.run_import_from_archive()
+
     def on_export_bonus_content(self) -> None:
         self._import_export.run_export()
 
