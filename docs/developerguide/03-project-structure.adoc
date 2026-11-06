@@ -41,6 +41,7 @@ snapshot_pack_creator_V1_9/
 │       ├── image_preprocess.py  ← Pillow batch resize/recompress (NEW)
 │       ├── plugin_dialog.py     ← Manage Plugins enable/disable dialog (NEW)
 │       ├── import_export.py
+│       ├── archive_import.py   ← ZIP/RAR import extraction (NEW)
 │       ├── pack_info_widget.py  ← Pack Info tab (NEW)
 │       ├── tooltips.py          ← central tooltip registry (NEW)
 │       ├── picture_widget.py
@@ -55,6 +56,7 @@ snapshot_pack_creator_V1_9/
 │       ├── orphaned_files.py    ← Orphaned Files tab
 │       ├── position_rules.py    ← Position values reserved for a Pack Type (NEW)
 │       ├── issue_report.py      ← Flag-as-Wrong dialog + Issue Report generation (NEW)
+│       ├── photo_registry.py    ← cross-pack photo ID registry (src/registry.json) (NEW)
 │       └── plugin_system.py
 ├── tests/
 ├── temp/                 ← portable Python runtime (never committed)

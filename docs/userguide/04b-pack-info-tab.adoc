@@ -27,6 +27,8 @@ It is divided into three sub-tabs.
 
 TIP: Click *🎮 Get ID on Discord* to open the Snapshot! Discord server and request a unique ID range for your pack.
 
+TIP: Click *Verify Photo IDs* to check the IDs this pack's photos would receive (given its ID Range) against the photo ID registry (`src/registry.json`), warning about any that are already claimed by a different pack. Build/update the registry first with `tools\scan_photo_registry.py` — if none exists yet you'll be told where to put it.
+
 === Defaults
 
 Sets the fallback position, type, and color that the game uses for photos that do not specify their own values (`[Defaults]` section of `pack.ini`).

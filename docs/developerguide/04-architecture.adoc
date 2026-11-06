@@ -114,8 +114,14 @@ A plugin opts into a hardware check by declaring a module-level `MIN_VRAM_GB` co
 | `modules/import_export.py`
 | `ImportExportManager` — reads `pack.ini` folders (all ini merged); detects `gameID`/`plugID`; parses `[Defaults]` and `[Events]` into structured fields; writes split export folders; see <<import-export-internals>> for details
 
+| `modules/archive_import.py`
+| `extract_archive_to_temp(archive_path)` — extracts a `.zip`/`.rar` bonus content pack to a temp folder (`.zip` via stdlib `zipfile` with zip-slip protection, `.rar` by shelling out to 7-Zip); used by `ImportExportManager.run_import_from_archive()`
+
 | `modules/pack_info_widget.py`
-| `PackInfoWidget` — three-tab editor: Identity, Defaults, Category & Traits; emits `game_changed` signal
+| `PackInfoWidget` — three-tab editor: Identity, Defaults, Category & Traits; emits `game_changed` signal; *Verify Photo IDs* button checks the pack's computed photo IDs against `photo_registry`
+
+| `modules/photo_registry.py`
+| `default_registry_path()` / `load_registry()` / `save_registry()` / `compute_photo_ids(id_range, names)` / `find_conflicts(registry, game, pack_name, photo_ids)` — tracks which photo IDs are already claimed across scanned packs in `src/registry.json`; populated by `tools\scan_photo_registry.py`, consumed by `pack_info_widget.py` and `issue_report.py`
 
 | `modules/tooltips.py`
 | Central `TIPS` registry; `set_tip(widget, key)` helper

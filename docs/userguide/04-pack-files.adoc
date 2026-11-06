@@ -29,6 +29,14 @@ Once confirmed, all views are cleared before the new pack is loaded so no data f
 
 The application reads `pack.ini` and the `Data\` folder and loads everything into the current project.
 
+=== Importing from a ZIP/RAR Archive
+
+Select *File → Import Bonus Content from Archive…* and choose a `.zip` or `.rar` file (e.g. a pack downloaded from a sharing site).
+
+The archive is extracted to a temporary folder (descending into a single top-level subfolder automatically, matching how official Bonus Content packs are zipped) and then imported the same way as *Import Bonus Content…*.
+
+NOTE: Importing a `.rar` archive requires https://www.7-zip.org/[7-Zip] to be installed. If it isn't found, extract the archive manually and use *File → Import Bonus Content…* on the extracted folder instead.
+
 === Exporting a Bonus Content Folder
 
 Select *File → Export Bonus Content…* and choose a parent output folder.

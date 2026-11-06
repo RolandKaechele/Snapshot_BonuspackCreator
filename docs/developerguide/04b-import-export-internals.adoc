@@ -54,6 +54,15 @@ After reading all parts, `run_import` merges them:
 * `id` has trailing digits stripped (`"mypack1"` → `"mypack"`).
 * `title` has `" Part N"` suffix stripped.
 
+=== Import from archive (`run_import_from_archive`)
+
+`run_import_from_archive()` mirrors `run_import()` but sources the pack folder from a `.zip`/`.rar` archive instead of an existing folder, via `modules/archive_import.extract_archive_to_temp()`:
+
+* `.zip` archives are extracted with the stdlib `zipfile` module; member paths are checked against zip-slip before extraction (`_check_members_safe`).
+* `.rar` archives are extracted by shelling out to 7-Zip (`_find_7zip_exe()` locates it on `PATH` or at the usual install location); `ArchiveImportError` is raised with a user-facing message if 7-Zip isn't found or extraction fails.
+* The temp folder is left on disk for the lifetime of the imported pack (assets are referenced from there); it is not cleaned up automatically.
+* After extraction, `_import_from_folder(folder)` is called — identical code path to a normal folder import.
+
 === Export (`run_export`)
 
 `run_export()` validates dialog scenes via `validate_events()`, then writes the pack to a chosen parent folder.

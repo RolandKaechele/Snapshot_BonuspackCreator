@@ -39,3 +39,4 @@ When a task spans multiple domains, apply rules in this order: **1. Correctness 
 > | `coding-conventions.instructions.md` | always | Python style, PyQt6 rules, debug output |
 > | `testing.instructions.md` | `tests/**` | pytest, fixtures, coverage |
 > | `documentation.instructions.md` | `docs/**` | Markdown/AsciiDoc rules |
+> | `doc-sync.instructions.md` | `src/**` | Keep userguide/developerguide docs updated alongside code changes |

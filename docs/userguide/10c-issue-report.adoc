@@ -16,6 +16,9 @@ You'll be prompted for a save location; the file defaults to `<pack id>_issue_re
 | ID Conflicts
 | Photo IDs this pack would assign that are already claimed by a different pack, checked against the photo ID registry (same check as *Verify Photo IDs* on the Pack Info tab). Skipped with a note if no registry file has been built yet.
 
+| ID Range Too Small
+| The declared `idrange=` in Pack Info doesn't cover every photo in the pack (photos beyond the range would get IDs colliding with whatever pack reserves the next range). Skipped for already-split multi-part packs, where each part has its own (separately valid) range.
+
 | Broken References
 | Filenames referenced by the pack (photos, overlays, textures, events, dialog scene commands) that don't exist on disk — the same check as the *Broken References* list on the xref:10b-orphaned-files-tab.adoc[Orphaned Files tab].
 

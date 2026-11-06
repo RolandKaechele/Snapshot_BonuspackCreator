@@ -13,7 +13,7 @@ The main window is divided into:
 | Menu | Notable items
 
 | File
-| New/Open/Save/Save As; *Restore Previous Version…* (pick from the last 10 auto-backups); *Open Recent* (last 10 opened/saved packs); Import/Export Bonus Content; *Export Bonus Content as ZIP…*
+| New/Open/Save/Save As; *Restore Previous Version…* (pick from the last 10 auto-backups); *Open Recent* (last 10 opened/saved packs); Import/Export Bonus Content; *Import Bonus Content from Archive…* (.zip/.rar); *Export Bonus Content as ZIP…*
 
 | Edit
 | *Undo* (Ctrl+Z) / *Redo* (Ctrl+Y); Settings…

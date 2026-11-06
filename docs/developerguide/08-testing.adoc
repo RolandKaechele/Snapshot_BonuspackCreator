@@ -26,6 +26,9 @@ Use `tmp_path` for any test that reads or writes files.
 | `test_import_export.py`
 | `_write_pack_ini`, `_read_pack_ini`, `_export_photo_files` — no Qt required
 
+| `test_archive_import.py`
+| `extract_archive_to_temp` — zip-slip rejection, single-subfolder descent, missing-7zip error for `.rar`
+
 | `test_plugin_system.py`
 | Plugin discovery, loading, error isolation
 
