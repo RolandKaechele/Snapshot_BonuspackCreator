@@ -1,5 +1,7 @@
 # plugins/
 
+The App is **not officially associated with Snapshot! or Tiny Secret Games**.
+
 Drop plugin packages or `.py` modules into this folder.
 
 Each plugin must expose a top-level `register(app)` function.

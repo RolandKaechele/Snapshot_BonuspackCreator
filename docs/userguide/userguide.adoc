@@ -4,6 +4,8 @@
 :icons: font
 :source-highlighter: rouge
 
+NOTE: This app is *not officially associated with Snapshot! or Tiny Secret Games*.
+
 include::01-introduction.adoc[]
 
 include::02-installation.adoc[]

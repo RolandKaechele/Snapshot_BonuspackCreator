@@ -1,5 +1,7 @@
 # Snapshot Pack Creator
 
+The App is **not officially associated with Snapshot! or Tiny Secret Games**.
+
 Desktop application for creating and editing bonus content packs for *Snapshot!*, *Snapshot: Lewd Shores*, and *Snapshot! Naughty Nightmares*.
 
 Built with **Python 3.12** and **PyQt6**.
