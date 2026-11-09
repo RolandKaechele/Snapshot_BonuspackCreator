@@ -333,7 +333,8 @@ class MainWindow(QMainWindow):
             "About Snapshot Pack Creator",
             f"Snapshot Pack Creator  {BUILD_VERSION}\n"
             "Creates bonus content packs for Snapshot!, Snapshot: Lewd Shores, and Snapshot! Naughty Nightmares.\n\n"
-            "Built with Python 3.12 + PyQt6.",
+            "Built with Python 3.12 + PyQt6.\n\n"
+            "This app is not officially associated with Snapshot! or Tiny Secret Games.",
             tag="MainWindow.on_about",
         )
 
