@@ -360,6 +360,29 @@ def _node_label(idx: int, node: dict) -> str:
         label += f"  {preview}"
     return label
 
+
+def _cmd_arg_broken(key: str, val: str, folder: str, game: str) -> bool:
+    """Return True when an overlay/sound command's Argument resolves to neither a
+    pack asset nor a builtin game asset (mirrors orphaned_files._collect_broken_scene_assets)."""
+    if not val:
+        return False
+    if key in _OV_IMAGE_CMDS:
+        in_pack = os.path.isfile(resolve_asset(val, folder)) if folder else False
+        in_game = bool(resolve_game_asset(val, "Texture2D", game))
+        return not in_pack and not in_game
+    if key in _SOUND_CMDS:
+        in_pack = bool(resolve_audio_asset(val, folder)) if folder else False
+        in_game = bool(resolve_game_asset(val, "AudioClip", game))
+        return not in_pack and not in_game
+    return False
+
+
+def _node_has_broken_ref(node: dict, folder: str, game: str) -> bool:
+    """Return True when any command in *node* has a broken/missing asset reference."""
+    return any(_cmd_arg_broken(v.get("key", ""), v.get("val", ""), folder, game)
+               for v in node.get("vars", []))
+
+
 def validate_events(events: list) -> list:
     """Return [(severity, scene_name, node_idx_or_None, message), ...] for all dialog scenes."""
     import json as _json
@@ -1323,6 +1346,21 @@ class EventWidget(QWidget):
             cmb.setCurrentIndex(max(idx, 0))
             cmb.blockSignals(False)
 
+    def _refresh_var_table_icons(self, folder: str | None = None, game: str | None = None) -> None:
+        """Set/clear the warning icon on each command row whose Argument is broken."""
+        if folder is None:
+            folder = self._resolve_pack_folder()
+        if game is None:
+            game = self._pm.data.get("game", "snapshot")
+        for r in range(self._var_table.rowCount()):
+            cmd_item = self._var_table.item(r, 0)
+            arg_item = self._var_table.item(r, 1)
+            if arg_item is None:
+                continue
+            key = cmd_item.text() if cmd_item else ""
+            val = arg_item.text()
+            arg_item.setIcon(_emoji_icon("\u26a0") if _cmd_arg_broken(key, val, folder, game) else QIcon())
+
     def _on_var_row_selected(self, row: int, _col: int, _prev: int, _prev_col: int) -> None:
         if row < 0:
             self._btn_cmd_browse.setEnabled(False)
@@ -1488,9 +1526,13 @@ class EventWidget(QWidget):
 
     def _rebuild_node_list(self, keep_row: int = -1) -> None:
         self._node_list.clear()
+        folder = self._resolve_pack_folder()
+        game = self._pm.data.get("game", "snapshot")
         for i, node in enumerate(self._current_nodes):
             item = QListWidgetItem(_node_label(i, node))
             item.setData(Qt.ItemDataRole.UserRole, i)
+            if _node_has_broken_ref(node, folder, game):
+                item.setIcon(_emoji_icon("\u26a0"))
             self._node_list.addItem(item)
         # Populate combos before setCurrentRow triggers _on_node_selected
         self._populate_flow_combos()
@@ -1528,11 +1570,18 @@ class EventWidget(QWidget):
             idx = cmb.findData(val)
             cmb.setCurrentIndex(max(idx, 0))
         self._var_table.setRowCount(0)
+        folder = self._resolve_pack_folder()
+        game = self._pm.data.get("game", "snapshot")
         for v in node.get("vars", []):
             r = self._var_table.rowCount()
             self._var_table.insertRow(r)
-            self._var_table.setItem(r, 0, QTableWidgetItem(v.get("key", "")))
-            self._var_table.setItem(r, 1, QTableWidgetItem(str(v.get("val", ""))))
+            key = v.get("key", "")
+            val = str(v.get("val", ""))
+            self._var_table.setItem(r, 0, QTableWidgetItem(key))
+            arg_item = QTableWidgetItem(val)
+            if _cmd_arg_broken(key, val, folder, game):
+                arg_item.setIcon(_emoji_icon("\u26a0"))
+            self._var_table.setItem(r, 1, arg_item)
         # Show pd_ container only when this node triggers a player choice
         oSet = node.get("oSet", -1)
         if 0 <= oSet < len(self._current_pd_choices):
@@ -1570,7 +1619,12 @@ class EventWidget(QWidget):
             for r in range(self._var_table.rowCount())
         ]
         self._serialize_dialog()
-        self._node_list.item(row).setText(_node_label(row, node))
+        folder = self._resolve_pack_folder()
+        game = self._pm.data.get("game", "snapshot")
+        list_item = self._node_list.item(row)
+        list_item.setText(_node_label(row, node))
+        list_item.setIcon(_emoji_icon("\u26a0") if _node_has_broken_ref(node, folder, game) else QIcon())
+        self._refresh_var_table_icons(folder, game)
         # Refresh edges and highlight in graph window if open
         if self._dlg_graph_win and self._dlg_graph_win.isVisible():
             self._dlg_graph_win.refresh_edges()

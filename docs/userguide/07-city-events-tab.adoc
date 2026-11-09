@@ -75,6 +75,7 @@ TIP: `city_events_templates.json` lives beside `main.py` in a source checkout, o
 
 Displays the dialog nodes of the selected scene.
 Each node shows its index, speaker tag (if any), and a text preview.
+A ⚠ warning icon appears before any node whose commands reference an overlay image or sound name that cannot be found among the pack's own assets or the selected game's builtin assets — the same check used by the xref:10b-orphaned-files-tab.adoc[Orphaned Files tab].
 
 Toolbar buttons:
 
@@ -119,7 +120,7 @@ Shows and edits the properties of the selected node.
 | Index of an action node to trigger in parallel (`-1` = none).
 
 | *Commands table*
-| Zero or more commands executed when this node plays. Click the *Command* or *Argument* cell to open a dropdown. Use *Add* / *Remove* to manage rows.
+| Zero or more commands executed when this node plays. Click the *Command* or *Argument* cell to open a dropdown. Use *Add* / *Remove* to manage rows. A ⚠ icon appears on the Argument cell of any overlay-image or sound command whose value doesn't resolve to a known asset; it updates live as you edit.
 
 | *Browse…*
 | Enabled when the selected command uses an image or video argument (`showImage`, `mod_showImage`, `showEventPhoto`, `mod_overlayImage1`, `mod_overlayImage2`, `mod_overlayImage3`, `mod_addEventSellablePhoto`). Opens a file picker; the asset stem name is inserted automatically. If the selected file is an MP4 video (`.byte`), a video player widget replaces the image preview (video preview is only available for `mod_overlayImage3`).
