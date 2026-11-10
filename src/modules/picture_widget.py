@@ -21,7 +21,7 @@ from modules.tooltips import set_tip
 from ui.image_viewer import attach_viewer
 from modules.ai_image_gen import open_ai_generate_dialog
 from modules.position_rules import position_mismatch
-from ui.dialogs import show_file_removal_choice
+from ui.dialogs import show_file_removal_choice, show_confirm
 
 if TYPE_CHECKING:
     from modules.pack_manager import PackManager
@@ -364,7 +364,7 @@ class PictureWidget(QWidget):
 
     def _on_preprocess_images(self) -> None:
         from PyQt6.QtWidgets import QInputDialog, QMessageBox #type: ignore
-        from ui.dialogs import show_confirm, show_info
+        from ui.dialogs import show_info
 
         selected_rows = [
             self._row_to_index[self._list.row(item)]
@@ -584,6 +584,10 @@ class PictureWidget(QWidget):
         new_type = self._cmb_type.currentText().strip() or None
         new_special = self._cmb_color_special.currentText().strip() or None
 
+        if new_special == "rare" and not self._confirm_rare_cap(selected_rows, photos):
+            new_special = None
+            self._revert_color_combo(photos[selected_rows[0]].get("color", ""))
+
         ht = self._cmb_hypno_type.currentText()
         ow_type = self._edit_overwrite_type.text() if self._chk_overwrite_type.isChecked() else ""
         ow_color = self._edit_overwrite_color.text() if self._chk_overwrite_color.isChecked() else ""
@@ -608,6 +612,43 @@ class PictureWidget(QWidget):
         # Thumbnail only applies when exactly one photo is selected
         if len(selected_rows) == 1:
             photos[selected_rows[0]]["thumbnail"] = self._chk_thumbnail.isChecked()
+
+    def _confirm_rare_cap(self, selected_rows: list, photos: list) -> bool:
+        """Ask for confirmation when setting color='rare' on *selected_rows* would
+        push the pack over the rare-photo cap (ceil(photo_count / 10)), Snapshot!
+        and Naughty Nightmares Photos packs only. Returns True to proceed."""
+        game = self._pm.get("game", "snapshot")
+        pack_type = self._pm.get("pack_type", "photos")
+        total = len(photos)
+        if game not in ("snapshot", "naughtynightmares") or pack_type != "photos" or not total:
+            return True
+        limit = math.ceil(total / 10)
+        selected_set = set(selected_rows)
+        rare_outside_selection = sum(
+            1 for i, p in enumerate(photos) if p.get("color") == "rare" and i not in selected_set
+        )
+        projected = rare_outside_selection + len(selected_rows)
+        if projected <= limit:
+            return True
+        return show_confirm(
+            self, "Rare Photo Cap",
+            f"Setting color to 'rare' here would bring the total to {projected} rare photo(s), "
+            f"but this pack only allows {limit} (ceil({total} photos / 10)).\n"
+            "Excess rare photos will be silently downgraded to 'none' by the game.\n\n"
+            "Set to 'rare' anyway?",
+            tag="PictureWidget._on_trait_changed",
+        )
+
+    def _revert_color_combo(self, color: str) -> None:
+        """Reset the Color/Special combo back to *color* without re-triggering
+        _on_trait_changed, used when the user cancels a rare-cap confirmation."""
+        self._cmb_color_special.blockSignals(True)
+        idx = self._cmb_color_special.findText(color)
+        if idx >= 0:
+            self._cmb_color_special.setCurrentIndex(idx)
+        else:
+            self._cmb_color_special.setEditText(color)
+        self._cmb_color_special.blockSignals(False)
 
     # ── Helpers ───────────────────────────────────────────────────────────
 
@@ -760,6 +801,11 @@ class PictureWidget(QWidget):
         self._list.clear()
         filter_text = self._edit_filter.text().strip().lower() if hasattr(self, "_edit_filter") else ""
         pack_type = self._pm.get("pack_type", "photos")
+        rare_exceeded = (
+            self._pm.get("game", "snapshot") in ("snapshot", "naughtynightmares")
+            and pack_type == "photos"
+            and get_rare_photo_warning(self._pm.data) is not None
+        )
         self._row_to_index = []
         for idx, photo in enumerate(photos):
             label = os.path.splitext(
@@ -771,13 +817,25 @@ class PictureWidget(QWidget):
                 if filter_text not in haystack.lower():
                     continue
             mismatch = position_mismatch(photo.get("position", ""), pack_type)
+            is_excess_rare = rare_exceeded and photo.get("color") == "rare"
             item = QListWidgetItem()
-            if photo.get("issue_flag") or mismatch:
+            if photo.get("issue_flag") or mismatch or is_excess_rare:
                 item.setText(f"\u26a0 {label}")
+                tooltips = []
+                if photo.get("issue_flag"):
+                    note = photo.get("issue_note", "").strip()
+                    tooltips.append(
+                        f"Flagged as wrong: {note}" if note else "Flagged as wrong.")
                 if mismatch:
-                    item.setToolTip(
+                    tooltips.append(
                         f"Position '{photo.get('position')}' is reserved for Pack Type "
                         f"'{mismatch}', not the current pack's Pack Type.")
+                if is_excess_rare:
+                    tooltips.append(
+                        "More photos are marked 'rare' than this pack allows; excess ones "
+                        "will be silently downgraded to 'none' by the game.")
+                if tooltips:
+                    item.setToolTip("\n".join(tooltips))
             else:
                 item.setText(label)
             pix = load_pixmap(photo.get("source")) if photo.get("source") else QPixmap()

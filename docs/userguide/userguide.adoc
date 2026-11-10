@@ -26,7 +26,7 @@ include::08-cutscenes-tab.adoc[]
 
 include::09-love-lens-tab.adoc[]
 
-include::10b-orphaned-files-tab.adoc[]
+include::10b-warnings-tab.adoc[]
 
 include::10c-issue-report.adoc[]
 

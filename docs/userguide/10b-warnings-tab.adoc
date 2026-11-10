@@ -1,9 +1,21 @@
-== Orphaned Files Tab
+== Warnings Tab
 
-The *Orphaned Files* tab appears automatically after importing a pack when the application finds assets on disk that need attention.
+The *Warnings* tab appears automatically after importing a pack (or opening/editing one) when the application finds assets on disk or pack data that need attention.
 It is hidden when there is nothing to report.
 
-=== Orphaned Files (top list)
+=== Pack Warnings (top list)
+
+Advisory issues detected directly from the pack data, each shown with a yellow icon and a tooltip with details:
+
+* Photos manually marked via *Flag as Wrong…* on the Photos tab.
+* Photos whose `Position` is reserved for a different Pack Type (see xref:05-photos-tab.adoc[Photos Tab]).
+* A declared `idrange=` too narrow to cover every photo in the pack.
+* Photo IDs already claimed by a different pack in the photo ID registry.
+* More photos marked `rare` than the game allows (Snapshot! and Naughty Nightmares Photos packs only) — the tooltip lists every affected photo name.
+
+These are the same checks included in the xref:10c-issue-report.adoc[Issue Report]; no dialog is shown on import anymore — check this tab instead.
+
+=== Orphaned Files (middle list)
 
 An *orphaned* file is a file that exists in the pack's `Data/` folder (or root folder) but is not referenced by any photo, event, overlay, texture, or dialog JSON in the current pack.
 
@@ -37,4 +49,5 @@ Broken references do not block export but will cause missing-asset errors in-gam
 * The tab refreshes automatically whenever you import a pack or switch packs.
 * Deleting an orphaned file is permanent and cannot be undone.
 * A file that is referenced only inside a dialog JSON string (e.g. as an image argument to `showImage`) is counted as referenced and will _not_ appear as orphaned.
-* Both lists are also included in the xref:10c-issue-report.adoc[Issue Report] (*Tools → Generate Issue Report…*), so you don't need to check this tab manually before sharing a pack.
+* All three lists are also included in the xref:10c-issue-report.adoc[Issue Report] (*Tools → Generate Issue Report…*), so you don't need to check this tab manually before sharing a pack.
+

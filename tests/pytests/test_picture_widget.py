@@ -114,6 +114,124 @@ def test_thumbnail_label_hidden_by_default(widget):
     assert not widget._lbl_multi.isVisible()
 
 
+# ── Rare photo cap warning icon ──────────────────────────────────────────────
+
+def test_rebuild_list_marks_excess_rare_photos_with_warning_icon(widget):
+    widget._pm.set("game", "snapshot")
+    widget._pm.set("pack_type", "photos")
+    widget._pm.data["photos"] = [
+        {"name": f"p{i}", "color": "rare" if i < 2 else "white"} for i in range(10)
+    ]
+    widget._rebuild_list()
+    texts = [widget._list.item(i).text() for i in range(widget._list.count())]
+    assert texts[0].startswith("\u26a0")
+    assert texts[1].startswith("\u26a0")
+    assert not texts[2].startswith("\u26a0")
+
+
+def test_rebuild_list_no_warning_icon_when_rare_within_limit(widget):
+    widget._pm.set("game", "snapshot")
+    widget._pm.set("pack_type", "photos")
+    widget._pm.data["photos"] = [
+        {"name": f"p{i}", "color": "rare" if i == 0 else "white"} for i in range(10)
+    ]
+    widget._rebuild_list()
+    texts = [widget._list.item(i).text() for i in range(widget._list.count())]
+    assert not any(t.startswith("\u26a0") for t in texts)
+
+
+def test_rebuild_list_tooltip_includes_issue_flag_note(widget):
+    widget._pm.set("game", "snapshot")
+    widget._pm.set("pack_type", "photos")
+    widget._pm.data["photos"] = [
+        {"name": "p0", "color": "white", "issue_flag": True, "issue_note": "wrong angle"},
+    ]
+    widget._rebuild_list()
+    assert "wrong angle" in widget._list.item(0).toolTip()
+
+
+def test_rebuild_list_tooltip_combines_all_applicable_warnings(widget):
+    widget._pm.set("game", "snapshot")
+    widget._pm.set("pack_type", "photos")
+    widget._pm.data["photos"] = [
+        {
+            "name": "p0", "color": "rare", "position": "hypno",
+            "issue_flag": True, "issue_note": "wrong angle",
+        },
+        {"name": "p1", "color": "rare"},
+    ] + [{"name": f"p{i}", "color": "white"} for i in range(2, 10)]
+    widget._rebuild_list()
+    tooltip = widget._list.item(0).toolTip()
+    assert "wrong angle" in tooltip
+    assert "reserved for Pack Type" in tooltip
+    assert "excess ones" in tooltip
+
+
+# ── Rare photo cap confirmation on trait change ──────────────────────────────
+
+def test_confirm_rare_cap_true_when_within_limit(widget):
+    photos = [{"name": f"p{i}", "color": "white"} for i in range(10)]
+    widget._pm.set("game", "snapshot")
+    widget._pm.set("pack_type", "photos")
+    assert widget._confirm_rare_cap([0], photos) is True
+
+
+def test_confirm_rare_cap_prompts_when_over_limit(widget, monkeypatch):
+    photos = [{"name": f"p{i}", "color": "white"} for i in range(10)]
+    photos[0]["color"] = "rare"  # 1 already rare; limit = ceil(10/10) = 1
+    widget._pm.set("game", "snapshot")
+    widget._pm.set("pack_type", "photos")
+    captured = {}
+
+    def _fake_confirm(*a, **kw):
+        captured["called"] = True
+        return False
+
+    monkeypatch.setattr("modules.picture_widget.show_confirm", _fake_confirm)
+    assert widget._confirm_rare_cap([1], photos) is False
+    assert captured.get("called")
+
+
+def test_confirm_rare_cap_skipped_for_lewdshores(widget):
+    photos = [{"name": f"p{i}", "color": "rare"} for i in range(10)]
+    widget._pm.set("game", "lewdshores")
+    widget._pm.set("pack_type", "photos")
+    assert widget._confirm_rare_cap([0], photos) is True
+
+
+def test_setting_rare_over_limit_reverts_when_cancelled(widget, monkeypatch):
+    widget._pm.set("game", "snapshot")
+    widget._pm.set("pack_type", "photos")
+    widget._pm.data["photos"] = [
+        {"name": f"p{i}", "color": "white", "position": "upskirt"} for i in range(10)
+    ]
+    widget._pm.data["photos"][0]["color"] = "rare"  # already at the limit (1)
+    widget._rebuild_list()
+    widget._list.setCurrentRow(1)  # select the 2nd photo (currently "white")
+
+    monkeypatch.setattr("modules.picture_widget.show_confirm", lambda *a, **kw: False)
+    widget._cmb_color_special.setCurrentText("rare")
+
+    assert widget._pm.data["photos"][1]["color"] == "white"
+    assert widget._cmb_color_special.currentText() == "white"
+
+
+def test_setting_rare_over_limit_applies_when_confirmed(widget, monkeypatch):
+    widget._pm.set("game", "snapshot")
+    widget._pm.set("pack_type", "photos")
+    widget._pm.data["photos"] = [
+        {"name": f"p{i}", "color": "white", "position": "upskirt"} for i in range(10)
+    ]
+    widget._pm.data["photos"][0]["color"] = "rare"
+    widget._rebuild_list()
+    widget._list.setCurrentRow(1)
+
+    monkeypatch.setattr("modules.picture_widget.show_confirm", lambda *a, **kw: True)
+    widget._cmb_color_special.setCurrentText("rare")
+
+    assert widget._pm.data["photos"][1]["color"] == "rare"
+
+
 # ── AI Generate widget_type routing per game ─────────────────────────────────
 
 def test_ai_generate_uses_photos_widget_type_for_snapshot(widget, monkeypatch):

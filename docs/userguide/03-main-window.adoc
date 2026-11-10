@@ -60,7 +60,7 @@ The tabs reappear/relabel instantly when you switch games.
 | Full character replacement set
 | Snapshot! only
 
-| Orphaned Files
+| Warnings
 | Unreferenced assets on disk and broken ini references; auto-hidden when empty
 | Both
 |===

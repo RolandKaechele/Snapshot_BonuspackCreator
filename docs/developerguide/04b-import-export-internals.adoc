@@ -113,7 +113,7 @@ Naughty Nightmares packs (`game == "naughtynightmares"`) use the same `[Mod]` / 
 * Copies photo source files to `Data/`, preserving the original file extension.
 * Copies overlay / texture source files using `os.path.basename(src)`.
 * Copies event dialog JSON files to `Data/`.
-* Copies **orphaned files** — files present in `source_folder/Data/` that are not referenced by any photo, event, overlay, texture, or JSON string — using `_collect_referenced()` / `_collect_disk_assets()` from `orphaned_files.py`.
+* Copies **orphaned files** — files present in `source_folder/Data/` that are not referenced by any photo, event, overlay, texture, or JSON string — using `_collect_referenced()` / `_collect_disk_assets()` from `warnings_tab.py`.
   This requires `data["source_folder"]` to be set (done by `run_import`; must be set manually in scripts).
 
 ==== Export-time validation

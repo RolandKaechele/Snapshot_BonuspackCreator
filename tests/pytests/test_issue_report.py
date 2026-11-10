@@ -76,7 +76,10 @@ def _pack_with_colors(colors: list[str], game: str = "snapshot") -> dict:
 def test_detect_rare_photo_cap_exceeded_flags_over_limit():
     data = _pack_with_colors(["rare", "rare"] + ["white"] * 8)  # limit=1, 2 rare
     result = detect_rare_photo_cap_exceeded(data)
-    assert result == {"rare_count": 2, "limit": 1, "photo_count": 10}
+    assert result == {
+        "rare_count": 2, "limit": 1, "photo_count": 10,
+        "rare_photos": ["mypack0", "mypack1"],
+    }
 
 
 def test_detect_rare_photo_cap_exceeded_ok_within_limit():
@@ -106,6 +109,8 @@ def test_issue_report_includes_rare_photo_cap_section():
     assert "## Rare Photo Cap Exceeded" in report
     assert "2 photo(s)" in report
     assert "allows 1" in report
+    assert "- mypack0" in report
+    assert "- mypack1" in report
 
 
 def test_issue_report_no_issues_when_rare_within_limit():

@@ -87,6 +87,8 @@ Mark *Use as Thumbnail* on exactly one image to set the pack preview icon.
 
 NOTE: `Position` values that only make sense for a different Pack Type — `City Event Photo` and `Love Lens Photo` — are hidden from the dropdown unless that Pack Type (*Events* / *Love Lens*) is currently active. If a photo imported from elsewhere already uses one of those positions while the pack's Pack Type doesn't match, its entry in the list is marked with a \u26a0 icon and a tooltip explaining the mismatch; see xref:10c-issue-report.adoc[Issue Report].
 
+NOTE: For Snapshot! and Naughty Nightmares Photos packs, setting Color/Special to `rare` on a photo that would push the pack over the rare-photo cap (`ceil(photo count / 10)`) prompts a confirmation dialog explaining the cap; choosing *No* reverts the Color/Special field instead of applying the change. Photos already over the cap are also marked with a \u26a0 icon in the list — see xref:10c-issue-report.adoc[Issue Report].
+
 === Flagging a Photo as Wrong
 
 If a photo's Position, Type, or Color is wrong but you want to record the correct values for a bug report instead of (or in addition to) fixing it immediately, select the photo and click *Flag as Wrong…* in the toolbar.

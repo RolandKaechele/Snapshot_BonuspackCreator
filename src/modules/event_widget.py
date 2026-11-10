@@ -363,7 +363,7 @@ def _node_label(idx: int, node: dict) -> str:
 
 def _cmd_arg_broken(key: str, val: str, folder: str, game: str) -> bool:
     """Return True when an overlay/sound command's Argument resolves to neither a
-    pack asset nor a builtin game asset (mirrors orphaned_files._collect_broken_scene_assets)."""
+    pack asset nor a builtin game asset (mirrors warnings_tab._collect_broken_scene_assets)."""
     if not val:
         return False
     if key in _OV_IMAGE_CMDS:

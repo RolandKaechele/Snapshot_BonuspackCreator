@@ -1,8 +1,11 @@
-"""Orphaned Files tab — shows unreferenced assets in the pack folder.
+"""Warnings tab — shows unreferenced/missing assets plus advisory pack issues.
 
 An asset is "orphaned" when it exists on disk but is not referenced by any
 photo, event, overlay, texture, or dialog JSON in the current pack.
 A "broken" reference is the inverse: the ini mentions it but the file is absent.
+The "Pack Warnings" list additionally surfaces flagged photos, Position/Pack
+Type mismatches, ID range/conflict issues, and rare-photo cap overflow —
+the same checks used by ``modules.issue_report``.
 """
 
 import json
@@ -159,8 +162,63 @@ def _yellow_icon(size: int = 16) -> QIcon:
     return QIcon(px)
 
 
-class OrphanedFilesWidget(QWidget):
-    """Shows orphaned (unreferenced) assets and broken (missing) references."""
+def _collect_pack_warnings(data: dict) -> list[tuple[str, str]]:
+    """Return a list of (label, tooltip) for every advisory pack issue:
+    flagged photos, Position/Pack Type mismatches, ID range too small,
+    ID conflicts, and rare-photo cap exceeded. Mirrors the sections of
+    ``issue_report.generate_issue_report_markdown`` that aren't already
+    covered by the orphaned/broken lists in this tab."""
+    from modules.issue_report import (
+        detect_position_mismatches, detect_id_range_too_small,
+        detect_id_conflicts, detect_rare_photo_cap_exceeded,
+    )
+
+    warnings: list[tuple[str, str]] = []
+
+    for photo in data.get("photos", []):
+        if photo.get("issue_flag"):
+            note = photo.get("issue_note", "").strip()
+            label = f"Flagged as wrong: {photo.get('name', '(unnamed)')}"
+            warnings.append((label, f"Flagged as wrong: {note}" if note else "Flagged as wrong."))
+
+    for m in detect_position_mismatches(data):
+        warnings.append((
+            f"Position/Pack Type mismatch: {m['name']}",
+            f"Position '{m['position']}' is reserved for Pack Type '{m['expected_pack_type']}', "
+            "not the current pack's Pack Type.",
+        ))
+
+    range_too_small = detect_id_range_too_small(data)
+    if range_too_small:
+        warnings.append((
+            "ID Range Too Small",
+            f"Declared idrange={range_too_small['id_range']} only covers "
+            f"{range_too_small['range_width']} ID(s), but the pack has "
+            f"{range_too_small['photo_count']} photo(s)."
+        ))
+
+    id_conflicts, _registry_available = detect_id_conflicts(data)
+    for c in id_conflicts:
+        warnings.append((
+            f"ID Conflict: {c['photo_name']}",
+            f"Photo ID {c['photo_id']} is already assigned to pack '{c['other_pack_name']}'.",
+        ))
+
+    rare_cap_exceeded = detect_rare_photo_cap_exceeded(data)
+    if rare_cap_exceeded:
+        warnings.append((
+            "Rare Photo Cap Exceeded",
+            f"{rare_cap_exceeded['rare_count']} photo(s) are marked 'rare', but this pack "
+            f"only allows {rare_cap_exceeded['limit']}. Excess rare photos will be silently "
+            "downgraded to 'none' by the game.\n\nAffected: "
+            + ", ".join(rare_cap_exceeded["rare_photos"]),
+        ))
+
+    return warnings
+
+
+class WarningsTabWidget(QWidget):
+    """Shows pack warnings, orphaned (unreferenced) assets, and broken (missing) references."""
 
     def __init__(self, pack_manager: "PackManager") -> None:
         super().__init__()
@@ -181,6 +239,16 @@ class OrphanedFilesWidget(QWidget):
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Pack warnings list (flagged photos, position mismatches, ID issues, rare cap)
+        warnings_grp = QGroupBox("Pack Warnings")
+        warnings_vbox = QVBoxLayout(warnings_grp)
+        self._list_warnings = QListWidget()
+        self._list_warnings.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self._list_warnings.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._list_warnings.customContextMenuRequested.connect(
+            lambda pos: self._show_copy_menu(self._list_warnings, pos))
+        warnings_vbox.addWidget(self._list_warnings)
 
         # Orphaned files list
         orphan_grp = QGroupBox("Orphaned files (on disk, not referenced)")
@@ -214,6 +282,7 @@ class OrphanedFilesWidget(QWidget):
             lambda pos: self._show_copy_menu(self._list_broken, pos))
         broken_vbox.addWidget(self._list_broken)
 
+        left_layout.addWidget(warnings_grp, 2)
         left_layout.addWidget(orphan_grp, 3)
         left_layout.addWidget(broken_grp, 1)
 
@@ -258,6 +327,7 @@ class OrphanedFilesWidget(QWidget):
     def refresh(self, folder: str = "") -> None:
         """Repopulate lists from *folder* (pack's source folder on disk)."""
         self._folder = folder
+        self._list_warnings.clear()
         self._list_orphaned.clear()
         self._list_broken.clear()
         self._lbl_preview.clear()
@@ -267,14 +337,20 @@ class OrphanedFilesWidget(QWidget):
         self._lbl_info.clear()
         self._btn_delete.setEnabled(False)
 
+        data = self._pm.data
+        yellow = _yellow_icon()
+        for label, tooltip in _collect_pack_warnings(data):
+            item = QListWidgetItem(yellow, label)
+            item.setToolTip(tooltip)
+            self._list_warnings.addItem(item)
+
         if not folder or not os.path.isdir(folder):
             return
 
-        data = self._pm.data
         referenced = _collect_referenced(data)
         disk_files = _collect_disk_assets(folder)
 
-        _dlog("OrphanedFilesWidget.refresh",
+        _dlog("WarningsTabWidget.refresh",
               f"folder={folder!r}, referenced={len(referenced)}, disk={len(disk_files)}")
 
         for path in sorted(disk_files, key=lambda p: os.path.basename(p).lower()):
@@ -285,7 +361,6 @@ class OrphanedFilesWidget(QWidget):
                 self._list_orphaned.addItem(item)
 
         # Broken references with yellow icon
-        yellow = _yellow_icon()
         broken_labels = _collect_broken(data) + _collect_broken_scene_assets(data, folder)
         for label in sorted(set(broken_labels)):
             item = QListWidgetItem(yellow, label)
@@ -302,7 +377,7 @@ class OrphanedFilesWidget(QWidget):
             path = item.data(Qt.ItemDataRole.UserRole) or ""
             if os.path.splitext(os.path.basename(path))[0].lower() == stem_low:
                 self._list_orphaned.takeItem(i)
-                _dlog("OrphanedFilesWidget.notify_referenced", f"removed {stem!r}")
+                _dlog("WarningsTabWidget.notify_referenced", f"removed {stem!r}")
 
     # ── Slots ───────────────────────────────────────────────────────────────
 
@@ -381,8 +456,8 @@ class OrphanedFilesWidget(QWidget):
             if path and os.path.exists(path):
                 try:
                     os.remove(path)
-                    _dlog("OrphanedFilesWidget._on_delete", f"deleted {path!r}")
+                    _dlog("WarningsTabWidget._on_delete", f"deleted {path!r}")
                 except OSError as exc:
-                    _dlog("OrphanedFilesWidget._on_delete", f"error: {exc}")
+                    _dlog("WarningsTabWidget._on_delete", f"error: {exc}")
         # Refresh to remove deleted items from list
         self.refresh(self._folder)

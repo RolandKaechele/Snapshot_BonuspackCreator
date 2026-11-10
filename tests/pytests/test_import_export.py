@@ -377,7 +377,9 @@ class _FakeParent:
         pass
 
 
-def test_import_from_folder_warns_when_rare_over_limit(tmp_path, qapp, monkeypatch):  # noqa: ARG001
+def test_import_from_folder_no_dialog_when_rare_over_limit(tmp_path, qapp, monkeypatch):  # noqa: ARG001
+    """Rare-cap overflow is surfaced persistently in the Warnings tab now,
+    not via a blocking dialog on import."""
     from modules.import_export import ImportExportManager
 
     names = ",".join(f"pk{i}" for i in range(10))
@@ -401,8 +403,7 @@ def test_import_from_folder_warns_when_rare_over_limit(tmp_path, qapp, monkeypat
     manager = ImportExportManager(_FakeParent())
     manager._import_from_folder(str(tmp_path))
 
-    assert len(warnings) == 1
-    assert "2 photo(s)" in warnings[0]
+    assert warnings == []
 
 
 def test_import_from_folder_no_warning_within_limit(tmp_path, qapp, monkeypatch):  # noqa: ARG001

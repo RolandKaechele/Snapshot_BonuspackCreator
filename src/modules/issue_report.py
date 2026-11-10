@@ -184,10 +184,11 @@ def detect_id_range_too_small(pack_data: dict) -> dict | None:
 
 
 def detect_rare_photo_cap_exceeded(pack_data: dict) -> dict | None:
-    """Return ``{'rare_count', 'limit', 'photo_count'}`` when more photos are
-    marked ``'rare'`` than the game allows (``ceil(photo_count / 10)``), else
-    ``None``. Only enforced by Snapshot! and Naughty Nightmares photo packs —
-    mirrors ``modules.picture_widget.get_rare_photo_warning``."""
+    """Return ``{'rare_count', 'limit', 'photo_count', 'rare_photos'}`` when more
+    photos are marked ``'rare'`` than the game allows (``ceil(photo_count / 10)``),
+    else ``None``. ``rare_photos`` lists the name of every photo marked 'rare'.
+    Only enforced by Snapshot! and Naughty Nightmares photo packs — mirrors
+    ``modules.picture_widget.get_rare_photo_warning``."""
     if pack_data.get("game", "snapshot") not in ("snapshot", "naughtynightmares"):
         return None
     if pack_data.get("pack_type", "photos") != "photos":
@@ -198,10 +199,14 @@ def detect_rare_photo_cap_exceeded(pack_data: dict) -> dict | None:
     if total == 0:
         return None
     limit = math.ceil(total / 10)
-    rare_count = sum(1 for p in photos if p.get("color") == "rare")
+    rare_photos = [p.get("name", "") for p in photos if p.get("color") == "rare"]
+    rare_count = len(rare_photos)
     if rare_count <= limit:
         return None
-    return {"rare_count": rare_count, "limit": limit, "photo_count": total}
+    return {
+        "rare_count": rare_count, "limit": limit, "photo_count": total,
+        "rare_photos": rare_photos,
+    }
 
 
 def detect_id_conflicts(pack_data: dict) -> tuple[list[dict], bool]:
@@ -244,7 +249,7 @@ def generate_issue_report_markdown(pack_data: dict) -> str:
     """Return a Markdown report covering all known pack issues: manually
     flagged photos, auto-detected Position / Pack Type mismatches, orphaned
     files on disk, and broken (missing) references."""
-    from modules.orphaned_files import (
+    from modules.warnings_tab import (
         _collect_referenced, _collect_disk_assets, _collect_broken, _collect_broken_scene_assets,
     )
 
@@ -324,6 +329,10 @@ def generate_issue_report_markdown(pack_data: dict) -> str:
             f"only allows {rare_cap_exceeded['limit']} "
             f"(ceil({rare_cap_exceeded['photo_count']} photos / 10)). "
             "Excess rare photos will be silently downgraded to 'none' by the game.")
+        lines.append("")
+        lines.append("All photos currently marked 'rare':")
+        lines.append("")
+        lines.extend(f"- {name}" for name in rare_cap_exceeded["rare_photos"])
         lines.append("")
 
     if broken:

@@ -21,7 +21,7 @@ from modules.overwrite_texts import OverwriteTextsWidget
 from modules.event_widget import EventWidget
 from modules.cutscene_widget import CutsceneWidget
 from modules.love_lens import LoveLensWidget
-from modules.orphaned_files import OrphanedFilesWidget
+from modules.warnings_tab import WarningsTabWidget
 from modules.plugin_system import PluginSystem
 from modules.ai_image_gen import get_torch_info
 from modules.recent_files import load_recent, add_recent
@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
         self._event_widget = EventWidget(self._pack_manager)
         self._cutscene_widget = CutsceneWidget(self._pack_manager)
         self._love_lens_widget = LoveLensWidget(self._pack_manager)
-        self._orphaned_widget = OrphanedFilesWidget(self._pack_manager)
+        self._orphaned_widget = WarningsTabWidget(self._pack_manager)
 
         self._tabs.addTab(self._pack_info_widget, "Pack Info")
         self._tabs.addTab(self._picture_widget, "Photos")
@@ -79,7 +79,7 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._event_widget, "City Events")    # index 3
         self._tabs.addTab(self._cutscene_widget, "Cutscenes")   # index 4 — hidden until game supports it
         self._tabs.addTab(self._love_lens_widget, "Love Lens")  # index 5
-        self._tabs.addTab(self._orphaned_widget, "Orphaned Files")  # index 6 — shown only when needed
+        self._tabs.addTab(self._orphaned_widget, "Warnings")  # index 6 — shown only when needed
         self._tabs.setTabVisible(4, False)
         self._tabs.setTabVisible(6, False)
 
@@ -360,10 +360,11 @@ class MainWindow(QMainWindow):
         self._on_game_changed(self._pack_manager.get("game", "snapshot"))
 
     def _refresh_orphaned(self) -> None:
-        """Refresh the orphaned-files tab and show/hide it based on content."""
+        """Refresh the warnings tab and show/hide it based on content."""
         folder = self._pack_manager.get("source_folder", "")
         self._orphaned_widget.refresh(folder)
-        has_content = (self._orphaned_widget._list_orphaned.count() > 0
+        has_content = (self._orphaned_widget._list_warnings.count() > 0
+                       or self._orphaned_widget._list_orphaned.count() > 0
                        or self._orphaned_widget._list_broken.count() > 0)
         self._tabs.setTabVisible(6, has_content)
 

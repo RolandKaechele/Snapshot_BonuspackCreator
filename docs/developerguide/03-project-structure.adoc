@@ -53,7 +53,7 @@ snapshot_pack_creator_V1_9/
 │       ├── video_widget.py      ← inline MP4 video preview widget (NEW)
 │       ├── cutscene_widget.py
 │       ├── love_lens.py
-│       ├── orphaned_files.py    ← Orphaned Files tab
+│       ├── warnings_tab.py      ← Warnings tab (pack warnings + orphaned/broken files)
 │       ├── position_rules.py    ← Position values reserved for a Pack Type (NEW)
 │       ├── issue_report.py      ← Flag-as-Wrong dialog + Issue Report generation (NEW)
 │       ├── photo_registry.py    ← cross-pack photo ID registry (src/registry.json) (NEW)

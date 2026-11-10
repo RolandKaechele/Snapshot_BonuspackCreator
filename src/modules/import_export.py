@@ -104,14 +104,8 @@ class ImportExportManager:
             self._parent._refresh_all()
             self._parent.status().set_ok(f"Imported: {os.path.basename(folder)}")
             _dlog("ImportExportManager.run_import", f"Imported {folder} ({len(ini_paths)} ini files)")
-
-            # Advisory check: rare-photo cap (Snapshot / Naughty Nightmares only).
-            if pm.get("game", "snapshot") in ("snapshot", "naughtynightmares") and pm.get("pack_type", "photos") == "photos":
-                from modules.picture_widget import get_rare_photo_warning
-                rare_msg = get_rare_photo_warning(pm.data)
-                if rare_msg:
-                    show_warning(self._parent, "Import Warning", rare_msg,
-                                 tag="ImportExportManager.run_import")
+            # Advisory checks (rare-photo cap, position mismatches, flagged photos, ID
+            # issues) are now surfaced persistently in the Warnings tab instead of a dialog.
         except Exception as exc:
             show_error(self._parent, "Import Error", str(exc), exc=exc,
                        tag="ImportExportManager.run_import")
@@ -846,7 +840,7 @@ def _export_photo_files(data_folder: str, data: dict) -> None:
             shutil.copy2(src, dst)
 
     # Copy orphaned files (on disk in source folder but not referenced by the pack)
-    from modules.orphaned_files import _collect_referenced, _collect_disk_assets
+    from modules.warnings_tab import _collect_referenced, _collect_disk_assets
     source_folder = data.get("source_folder", "")
     if source_folder and os.path.isdir(source_folder):
         referenced = _collect_referenced(data)
