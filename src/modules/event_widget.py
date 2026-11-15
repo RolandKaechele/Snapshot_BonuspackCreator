@@ -22,14 +22,14 @@ from modules.event_creator import (
 from modules.dialog_graph import DialogGraphWidget, DialogGraphWindow
 from modules.dialog_player import DialogPlayerWindow
 from modules.image_utils import (
-    ASSET_FILTER, load_pixmap, resolve_asset, resolve_audio_asset,
+    ASSET_FILTER, SOUND_FILTER, load_pixmap, resolve_asset, resolve_audio_asset,
     list_game_assets, resolve_game_asset,
 )
 from modules.tooltips import set_tip, tip
 from modules.video_widget import VideoPreviewWidget, AudioPreviewWidget, is_video_file
 from modules.ai_image_gen import open_ai_generate_dialog, open_ai_video_gen_dialog
 from modules import city_events_templates
-from ui.dialogs import show_error, show_info
+from ui.dialogs import show_error, show_info, show_warning
 from ui.image_viewer import attach_viewer
 
 if TYPE_CHECKING:
@@ -51,6 +51,7 @@ _KNOWN_CMDS = [
     "alleyAmbience",
     "mascotMoan1", "mascotMoan2", "suckLoop",
     "mod_addEventSellablePhoto",
+    "payCash",
 ]
 
 
@@ -361,9 +362,14 @@ def _node_label(idx: int, node: dict) -> str:
     return label
 
 
-def _cmd_arg_broken(key: str, val: str, folder: str, game: str) -> bool:
+def _cmd_arg_broken(key: str, val: str, folder: str, game: str,
+                    sound_names: frozenset = frozenset()) -> bool:
     """Return True when an overlay/sound command's Argument resolves to neither a
-    pack asset nor a builtin game asset (mirrors warnings_tab._collect_broken_scene_assets)."""
+    pack asset nor a builtin game asset (mirrors warnings_tab._collect_broken_scene_assets).
+
+    *sound_names* are pack-level custom sound names (see EventWidget._pack_sound_names)
+    which always count as resolved, even before they are exported to a Data/ folder.
+    """
     if not val:
         return False
     if key in _OV_IMAGE_CMDS:
@@ -371,15 +377,18 @@ def _cmd_arg_broken(key: str, val: str, folder: str, game: str) -> bool:
         in_game = bool(resolve_game_asset(val, "Texture2D", game))
         return not in_pack and not in_game
     if key in _SOUND_CMDS:
+        if val in sound_names:
+            return False
         in_pack = bool(resolve_audio_asset(val, folder)) if folder else False
         in_game = bool(resolve_game_asset(val, "AudioClip", game))
         return not in_pack and not in_game
     return False
 
 
-def _node_has_broken_ref(node: dict, folder: str, game: str) -> bool:
+def _node_has_broken_ref(node: dict, folder: str, game: str,
+                        sound_names: frozenset = frozenset()) -> bool:
     """Return True when any command in *node* has a broken/missing asset reference."""
-    return any(_cmd_arg_broken(v.get("key", ""), v.get("val", ""), folder, game)
+    return any(_cmd_arg_broken(v.get("key", ""), v.get("val", ""), folder, game, sound_names)
                for v in node.get("vars", []))
 
 
@@ -471,6 +480,8 @@ class EventWidget(QWidget):
         self._tabs = QTabWidget()
         self._tabs.addTab(self._build_image_tab("background"), "Backgrounds")
         self._tabs.addTab(self._build_image_tab("overlay"), "Overlays")
+        self._snd_tab_index = self._tabs.count()
+        self._tabs.addTab(self._build_sound_tab(), "Sounds")
         self._tabs.addTab(self._build_dlg_tab(), "Dialogs")
         root.addWidget(self._tabs)
 
@@ -660,6 +671,113 @@ class EventWidget(QWidget):
         else:
             self._ov_list = ev_list
 
+        return page
+
+    def _sound_is_used(self, name: str) -> bool:
+        """Return True if *name* is referenced by a playSound/playSoundDelayed/
+        stopLoopedSound command in any dialog scene of the current pack."""
+        for ev in self._pm.data.get("events", []):
+            if ev.get("type") != "dialog":
+                continue
+            try:
+                data = json.loads(ev.get("content", "") or "{}")
+            except json.JSONDecodeError:
+                continue
+            for node in _extract_nodes(data):
+                for v in node.get("vars", []):
+                    if v.get("key") in _SOUND_CMDS and v.get("val") == name:
+                        return True
+        return False
+
+    def _build_sound_tab(self) -> QWidget:
+        """Pack-level custom WAV/MP3 sounds — usable from any step's sound dropdowns."""
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
+
+        hint = QLabel(
+            "Upload WAV/MP3 files here to make them available in every step's "
+            "\u201cPlay sound\u201d / \u201cPlay sound after 0.5 seconds\u201d dropdowns.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#888; font-size:11px;")
+        layout.addWidget(hint)
+
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(4)
+        btn_add = QPushButton("Add…")
+        btn_add.setFixedWidth(70)
+        btn_rem = QPushButton("Remove")
+        btn_rem.setFixedWidth(70)
+        toolbar.addWidget(btn_add)
+        toolbar.addWidget(btn_rem)
+        toolbar.addStretch()
+        layout.addLayout(toolbar)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        layout.addWidget(splitter, 1)
+
+        snd_list = QListWidget()
+        snd_list.setMinimumWidth(160)
+        snd_list.setMaximumWidth(320)
+        splitter.addWidget(snd_list)
+
+        preview = AudioPreviewWidget()
+        splitter.addWidget(preview)
+        splitter.setSizes([220, 300])
+
+        def _on_select(row: int) -> None:
+            if row < 0 or row >= snd_list.count():
+                preview.clear()
+                return
+            preview.set_path(snd_list.item(row).data(Qt.ItemDataRole.UserRole) or "")
+
+        def _on_add() -> None:
+            paths, _ = QFileDialog.getOpenFileNames(page, "Select Sound Files", "", SOUND_FILTER)
+            events: list = self._pm.data.setdefault("events", [])
+            existing_names = {e.get("name", "") for e in events if e.get("type") == "sound"}
+            for path in paths:
+                if any(e.get("type") == "sound" and e.get("source") == path for e in events):
+                    continue
+                name = os.path.splitext(os.path.basename(path))[0]
+                base, suffix = name, 2
+                while name in existing_names:
+                    name = f"{base}_{suffix}"
+                    suffix += 1
+                existing_names.add(name)
+                events.append({"type": "sound", "source": path, "name": name})
+                item = QListWidgetItem(name)
+                item.setData(Qt.ItemDataRole.UserRole, path)
+                snd_list.addItem(item)
+            if snd_list.count():
+                snd_list.setCurrentRow(snd_list.count() - 1)
+
+        def _on_rem() -> None:
+            row = snd_list.currentRow()
+            if row < 0:
+                return
+            snds = [e for e in self._pm.data.get("events", []) if e.get("type") == "sound"]
+            if row >= len(snds):
+                return
+            name = snds[row].get("name", "")
+            if self._sound_is_used(name):
+                show_warning(
+                    page, "Remove Sound",
+                    f"\u201c{name}\u201d is still used by a Play sound action in a dialog "
+                    "scene. Change that action before removing this sound.",
+                    tag="EventWidget._build_sound_tab._on_rem")
+                return
+            self._pm.data["events"].remove(snds[row])
+            snd_list.takeItem(row)
+            if self._current_dlg_row >= 0:
+                self._refresh_var_table_icons()
+                self._rebuild_node_list(keep_row=self._node_list.currentRow())
+
+        snd_list.currentRowChanged.connect(_on_select)
+        btn_add.clicked.connect(_on_add)
+        btn_rem.clicked.connect(_on_rem)
+
+        self._snd_list = snd_list
         return page
 
     def _reload_scene_templates(self) -> None:
@@ -1036,6 +1154,7 @@ class EventWidget(QWidget):
                 return
             if self._dlg_player_win is None:
                 self._dlg_player_win = DialogPlayerWindow(self.window())
+                self._dlg_player_win.edit_node_requested.connect(self._on_player_edit_node)
             dlgs = [e for e in self._pm.data.get("events", [])
                     if e.get("type") == "dialog"]
             dlg_name = ""
@@ -1329,6 +1448,8 @@ class EventWidget(QWidget):
                     if v.get("key") in _SOUND_CMDS and v.get("val"):
                         used.add(v["val"])
             _add(None, sorted(used))
+            _add(_emoji_icon("\U0001F3B5"), [e.get("name", "") for e in events
+                                            if e.get("type") == "sound" and e.get("name")])
             _add(_emoji_icon("\U0001F50A"), list_game_assets("AudioClip", game))
             return opts
         return opts
@@ -1346,12 +1467,20 @@ class EventWidget(QWidget):
             cmb.setCurrentIndex(max(idx, 0))
             cmb.blockSignals(False)
 
+    def _pack_sound_names(self) -> frozenset:
+        """Return the names of pack-level custom sound events (type == "sound")."""
+        return frozenset(
+            e.get("name", "") for e in self._pm.data.get("events", [])
+            if e.get("type") == "sound" and e.get("name")
+        )
+
     def _refresh_var_table_icons(self, folder: str | None = None, game: str | None = None) -> None:
         """Set/clear the warning icon on each command row whose Argument is broken."""
         if folder is None:
             folder = self._resolve_pack_folder()
         if game is None:
             game = self._pm.data.get("game", "snapshot")
+        sound_names = self._pack_sound_names()
         for r in range(self._var_table.rowCount()):
             cmd_item = self._var_table.item(r, 0)
             arg_item = self._var_table.item(r, 1)
@@ -1359,7 +1488,7 @@ class EventWidget(QWidget):
                 continue
             key = cmd_item.text() if cmd_item else ""
             val = arg_item.text()
-            arg_item.setIcon(_emoji_icon("\u26a0") if _cmd_arg_broken(key, val, folder, game) else QIcon())
+            arg_item.setIcon(_emoji_icon("\u26a0") if _cmd_arg_broken(key, val, folder, game, sound_names) else QIcon())
 
     def _on_var_row_selected(self, row: int, _col: int, _prev: int, _prev_col: int) -> None:
         if row < 0:
@@ -1386,7 +1515,13 @@ class EventWidget(QWidget):
         pack_folder = self._resolve_pack_folder()
         game = self._pm.data.get("game", "snapshot")
         if cmd in _SOUND_CMDS:
-            path = resolve_audio_asset(name, pack_folder) if name and pack_folder else ""
+            path = ""
+            for e in self._pm.data.get("events", []):
+                if e.get("type") == "sound" and e.get("name") == name:
+                    path = e.get("source") or ""
+                    break
+            if not path:
+                path = resolve_audio_asset(name, pack_folder) if name and pack_folder else ""
             if not path and name:
                 path = resolve_game_asset(name, "AudioClip", game)
             if not path and name and os.path.isfile(name):
@@ -1528,10 +1663,11 @@ class EventWidget(QWidget):
         self._node_list.clear()
         folder = self._resolve_pack_folder()
         game = self._pm.data.get("game", "snapshot")
+        sound_names = self._pack_sound_names()
         for i, node in enumerate(self._current_nodes):
             item = QListWidgetItem(_node_label(i, node))
             item.setData(Qt.ItemDataRole.UserRole, i)
-            if _node_has_broken_ref(node, folder, game):
+            if _node_has_broken_ref(node, folder, game, sound_names):
                 item.setIcon(_emoji_icon("\u26a0"))
             self._node_list.addItem(item)
         # Populate combos before setCurrentRow triggers _on_node_selected
@@ -1547,6 +1683,14 @@ class EventWidget(QWidget):
         self._node_list.blockSignals(False)
         self._loading = False
         self._on_node_selected(idx)
+
+    def _on_player_edit_node(self, idx: int) -> None:
+        """Called from the Test window's "Edit this node…" button."""
+        if self._dlg_player_win:
+            self._dlg_player_win.hide()
+        self._tabs.setCurrentIndex(self._snd_tab_index + 1)  # Dialogs tab
+        if 0 <= idx < self._node_list.count():
+            self._node_list.setCurrentRow(idx)
 
     def _on_graph_nodes_changed(self) -> None:
         """Called after a copy/paste in the graph canvas adds new nodes."""
@@ -1572,6 +1716,7 @@ class EventWidget(QWidget):
         self._var_table.setRowCount(0)
         folder = self._resolve_pack_folder()
         game = self._pm.data.get("game", "snapshot")
+        sound_names = self._pack_sound_names()
         for v in node.get("vars", []):
             r = self._var_table.rowCount()
             self._var_table.insertRow(r)
@@ -1579,7 +1724,7 @@ class EventWidget(QWidget):
             val = str(v.get("val", ""))
             self._var_table.setItem(r, 0, QTableWidgetItem(key))
             arg_item = QTableWidgetItem(val)
-            if _cmd_arg_broken(key, val, folder, game):
+            if _cmd_arg_broken(key, val, folder, game, sound_names):
                 arg_item.setIcon(_emoji_icon("\u26a0"))
             self._var_table.setItem(r, 1, arg_item)
         # Show pd_ container only when this node triggers a player choice
@@ -1623,7 +1768,7 @@ class EventWidget(QWidget):
         game = self._pm.data.get("game", "snapshot")
         list_item = self._node_list.item(row)
         list_item.setText(_node_label(row, node))
-        list_item.setIcon(_emoji_icon("\u26a0") if _node_has_broken_ref(node, folder, game) else QIcon())
+        list_item.setIcon(_emoji_icon("\u26a0") if _node_has_broken_ref(node, folder, game, self._pack_sound_names()) else QIcon())
         self._refresh_var_table_icons(folder, game)
         # Refresh edges and highlight in graph window if open
         if self._dlg_graph_win and self._dlg_graph_win.isVisible():
@@ -1871,6 +2016,7 @@ class EventWidget(QWidget):
         events: list = self._pm.data.get("events", [])
         bgs  = [e for e in events if e.get("type") == "background"]
         ovs  = [e for e in events if e.get("type") == "overlay"]
+        snds = [e for e in events if e.get("type") == "sound"]
         dlgs = [e for e in events if e.get("type") == "dialog"]
 
         self._bg_list.clear()
@@ -1884,6 +2030,12 @@ class EventWidget(QWidget):
             item = QListWidgetItem(e.get("name", ""))
             item.setData(Qt.ItemDataRole.UserRole, e.get("source", ""))
             self._ov_list.addItem(item)
+
+        self._snd_list.clear()
+        for e in snds:
+            item = QListWidgetItem(e.get("name", ""))
+            item.setData(Qt.ItemDataRole.UserRole, e.get("source", ""))
+            self._snd_list.addItem(item)
 
         self._dlg_list.clear()
         self._node_list.clear()
@@ -1925,6 +2077,9 @@ class EventWidget(QWidget):
         self._cmb_event_type.blockSignals(False)
         self._reload_scene_templates()
         self._rebuild_lists()
+        # Pack-level custom sounds are a Snapshot/Naughty Nightmares feature only
+        game = self._pm.data.get("game", "snapshot")
+        self._tabs.setTabVisible(self._snd_tab_index, game != "lewdshores")
         # Switch to first populated sub-tab
         events: list = self._pm.data.get("events", [])
         has_bg  = any(e.get("type") == "background" for e in events)
@@ -1935,4 +2090,4 @@ class EventWidget(QWidget):
         elif has_ov:
             self._tabs.setCurrentIndex(1)
         elif has_dlg:
-            self._tabs.setCurrentIndex(2)
+            self._tabs.setCurrentIndex(self._snd_tab_index + 1)

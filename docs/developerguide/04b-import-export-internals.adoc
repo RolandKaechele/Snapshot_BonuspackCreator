@@ -31,7 +31,7 @@ Reads one ini file and returns a plain `dict`.  Key fields populated:
 | `defaults_position` … | `[Defaults]` values read as structured fields, not passthrough
 | `photos` | List of dicts — one per name in `[Photos] names=`
 | `special_types`, `special_colors` | `[Special Traits]` / `[Create your own traits]` entries
-| `events` | `[Events]` — backgrounds, overlays, dialog JSON content
+| `events` | `[Events]` — backgrounds, overlays, dialog JSON content, pack-level custom sounds (`sounds=name.wav,...`, stored as `{"type": "sound", "name": ..., "source": ...}` entries, with the extension stripped from `name`)
 | `love_lens` | `[Hypnosis]` identity fields
 | `passthrough_sections` | Unknown sections stored verbatim for lossless re-export
 |===
@@ -86,6 +86,8 @@ Photos are normally chunked at 100 per file, producing a separate ini file per c
 
 **Issue-flagged photos:** for each photo, `_write_pack_ini()` calls `issue_report.effective_photo_traits(photo)`, which returns the photo's `position`/`type`/`color` overridden by `issue_correction` when `issue_flag` is set. The ini is written with these *corrected* values; the photo dict's original (wrong) values are left untouched in memory so the Issue Report can still show both. See xref:07-pack-json-schema.adoc[Pack JSON Schema] for the `issue_flag`/`issue_note`/`issue_correction` fields.
 
+**`[Events]` section:** written once, in the first exported ini part, when `pack_type == "events"` and at least one background/overlay/dialog/sound event is present (or `event_type != "normal"`). `sounds=` lists each pack-level custom sound (`type: "sound"` event) as `<name>.<ext>`, with the extension taken from the sound's source file (defaulting to `.wav` if unresolved) — unlike `backgrounds=`/`Overlays=`/`dialogs=`, which list bare stem names without an extension.
+
 For each part (when splitting does occur):
 
 * `id` and `title` get a part-number suffix appended (`mypack1`, `"My Pack Part 1"`).
@@ -113,6 +115,7 @@ Naughty Nightmares packs (`game == "naughtynightmares"`) use the same `[Mod]` / 
 * Copies photo source files to `Data/`, preserving the original file extension.
 * Copies overlay / texture source files using `os.path.basename(src)`.
 * Copies event dialog JSON files to `Data/`.
+* Copies pack-level custom sound (`type: "sound"`) source files to `Data/<name><ext>`, same generic path used for backgrounds/overlays (any event entry with a `source`/`name` that isn't `"dialog"`).
 * Copies **orphaned files** — files present in `source_folder/Data/` that are not referenced by any photo, event, overlay, texture, or JSON string — using `_collect_referenced()` / `_collect_disk_assets()` from `warnings_tab.py`.
   This requires `data["source_folder"]` to be set (done by `run_import`; must be set manually in scripts).
 

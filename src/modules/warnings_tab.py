@@ -59,8 +59,9 @@ def _collect_referenced(data: dict) -> set[str]:
         src = event.get("source", "")
         if src:
             _add(src)
-        # dialogs resolved by name (source is None until user browses)
-        if event.get("type") == "dialog":
+        # dialogs and pack-level sounds are resolved by name (source may be
+        # an external path with a different stem, e.g. after dedupe renaming)
+        if event.get("type") in ("dialog", "sound"):
             name = event.get("name", "")
             if name:
                 refs.add(name.lower())
@@ -126,6 +127,8 @@ def _collect_broken_scene_assets(data: dict, folder: str) -> list[str]:
     from modules.event_widget import _extract_nodes, _OV_IMAGE_CMDS, _SOUND_CMDS
 
     game = data.get("game", "snapshot")
+    sound_names = {e.get("name", "") for e in data.get("events", [])
+                   if e.get("type") == "sound" and e.get("name")}
     broken: list[str] = []
     for event in data.get("events", []):
         if event.get("type") != "dialog":
@@ -149,6 +152,8 @@ def _collect_broken_scene_assets(data: dict, folder: str) -> list[str]:
                     if not in_pack and not in_game:
                         broken.append(f"{val} (overlay, scene '{scene_name}')")
                 elif key in _SOUND_CMDS:
+                    if val in sound_names:
+                        continue
                     in_pack = bool(resolve_audio_asset(val, folder)) if folder else False
                     in_game = bool(resolve_game_asset(val, "AudioClip", game))
                     if not in_pack and not in_game:

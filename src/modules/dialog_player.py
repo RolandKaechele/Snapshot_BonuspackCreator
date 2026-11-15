@@ -2,12 +2,12 @@
 
 import os
 
-from PyQt6.QtCore import Qt, QRect, QUrl  # type: ignore
+from PyQt6.QtCore import Qt, QRect, QUrl, pyqtSignal  # type: ignore
 from PyQt6.QtGui import QFont, QPixmap, QPainter, QColor, QImage  # type: ignore
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink  # type: ignore
 from PyQt6.QtWidgets import (  # type: ignore
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QGroupBox, QWidget, QSizePolicy,
+    QFrame, QGroupBox, QWidget, QSizePolicy, QSpinBox,
 )
 
 from app_debug import dlog as _dlog
@@ -248,6 +248,10 @@ class DialogPlayerWindow(QDialog):
     Right panel: live background/overlay image preview.
     """
 
+    # Emitted when the user clicks "Edit this node", carrying the nd_ index
+    # of the node currently shown — the owning EventWidget selects it.
+    edit_node_requested = pyqtSignal(int)
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Dialog Test")
@@ -391,6 +395,29 @@ class DialogPlayerWindow(QDialog):
         root.addLayout(nav)
         root.addWidget(self._lbl_end)
 
+        # Jump-to-node + edit-current-node row
+        jump_row = QHBoxLayout()
+        jump_row.setSpacing(6)
+        jump_row.addWidget(QLabel("Go to node #:"))
+        self._spin_jump = QSpinBox()
+        self._spin_jump.setFixedWidth(70)
+        self._spin_jump.setRange(0, 0)
+        jump_row.addWidget(self._spin_jump)
+        self._btn_jump = QPushButton("Jump")
+        self._btn_jump.setFixedWidth(60)
+        self._btn_jump.setToolTip(
+            "Jump straight to this node without clearing history — Back still works.")
+        self._btn_jump.clicked.connect(lambda: self.jump_to(self._spin_jump.value()))
+        jump_row.addWidget(self._btn_jump)
+        jump_row.addStretch()
+        self._btn_edit_node = QPushButton("Edit this node…")
+        self._btn_edit_node.setToolTip(
+            "Close this preview and select the current node in the editor.")
+        self._btn_edit_node.clicked.connect(
+            lambda: self.edit_node_requested.emit(self._current))
+        jump_row.addWidget(self._btn_edit_node)
+        root.addLayout(jump_row)
+
     @staticmethod
     def _make_branch_lbl(color: str) -> QLabel:
         lbl = QLabel()
@@ -418,6 +445,10 @@ class DialogPlayerWindow(QDialog):
         self._current_ov2 = ""
         self._sound_player.stop()
         self._current = max(0, min(start_index, len(nodes) - 1)) if nodes else 0
+        self._spin_jump.setRange(0, max(len(nodes) - 1, 0))
+        self._spin_jump.setEnabled(bool(nodes))
+        self._btn_jump.setEnabled(bool(nodes))
+        self._btn_edit_node.setEnabled(bool(nodes))
         title = f"Dialog Test — {scene_name}" if scene_name else "Dialog Test"
         self.setWindowTitle(title)
         self._show_node()
@@ -519,6 +550,10 @@ class DialogPlayerWindow(QDialog):
         tag  = node.get("tag", "")
         text = node.get("text", "")
         vs   = node.get("vars", [])
+
+        self._spin_jump.blockSignals(True)
+        self._spin_jump.setValue(idx)
+        self._spin_jump.blockSignals(False)
 
         # Status
         self._lbl_status.setText(

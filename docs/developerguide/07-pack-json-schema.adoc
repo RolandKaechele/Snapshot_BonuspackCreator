@@ -85,7 +85,7 @@ All keys that appear in `PackManager._EMPTY_PACK` are guaranteed to be present a
 
 | `events`
 | `list[dict]`
-| City/Beach event backgrounds, overlays, and dialog JSON entries
+| City/Beach event backgrounds, overlays, dialog JSON entries, and pack-level custom sounds — see <<event-entry>>
 
 | `cutscenes`
 | `list[dict]`
@@ -99,6 +99,34 @@ All keys that appear in `PackManager._EMPTY_PACK` are guaranteed to be present a
 | `dict`
 | Character setup: model, hairStyle, accessories, hairColor, eyeColor
 |===
+
+[[event-entry]]
+=== Event Entry
+
+Each dict in `events` has a `type` of `"background"`, `"overlay"`, `"dialog"`, or `"sound"`.
+
+[cols="1,1,3"]
+|===
+| Key | Type | Description
+
+| `type`
+| `str`
+| `"background"`, `"overlay"`, `"dialog"`, or `"sound"`
+
+| `name`
+| `str`
+| Asset stem name used as the `pack.ini` key / exported Data filename (sound names never include their `.wav`/`.mp3` extension here — it is appended on export)
+
+| `source`
+| `str or None`
+| Absolute path to the source image/video/audio file; `None` when imported by name only and not yet located on disk
+
+| `content`
+| `str`
+| (`"dialog"` entries only) the flat `nd_*`/`pd_*` VIDE JSON, serialized as a string
+|===
+
+A `"sound"` entry is a pack-level custom WAV/MP3/OGG sound, added from the City/Beach Events tab's *Sounds* sub-tab (Snapshot!/Naughty Nightmares only — hidden for Lewd Shores). Its `name` is referenced from any dialog node's `playSound`/`playSoundDelayed`/`stopLoopedSound` command argument, alongside the pack's bundled game sounds.
 
 === Photo Entry
 

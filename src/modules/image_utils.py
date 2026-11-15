@@ -16,6 +16,9 @@ AUDIO_EXTS: tuple[str, ...] = (".ogg", ".wav", ".mp3")
 # Ready-made filter string for QFileDialog
 ASSET_FILTER = "Images & Videos (*.png *.jpg *.jpeg *.dat *.jpa *.pna *.bytes *.byte)"
 
+# Ready-made filter string for selecting pack-level custom sound files
+SOUND_FILTER = "Audio (*.wav *.mp3 *.ogg)"
+
 
 def load_pixmap(path: str) -> QPixmap:
     """Load a QPixmap from any supported game asset format.

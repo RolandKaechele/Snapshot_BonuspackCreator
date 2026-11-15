@@ -140,6 +140,87 @@ def test_write_pack_ini_events_type(tmp_path):
     assert "type=events" in content
 
 
+def test_write_pack_ini_sounds_line(tmp_path):
+    data = {
+        "game": "snapshot",
+        "pack_type": "events",
+        "id": "evpack",
+        "id_range": "113900-113910",
+        "title": "Event Pack",
+        "special_category": "",
+        "special_category_color": "#000000",
+        "photos": [],
+        "events": [
+            {"type": "sound", "name": "myboom", "source": "C:/clips/myboom.wav"},
+            {"type": "sound", "name": "mysting", "source": "C:/clips/mysting.mp3"},
+        ],
+    }
+    _write_pack_ini(str(tmp_path), data)
+    content = (tmp_path / "pack.ini").read_text(encoding="utf-8")
+    assert "sounds=myboom.wav,mysting.mp3" in content
+
+
+def test_write_pack_ini_sounds_line_preserves_ogg_extension(tmp_path):
+    data = {
+        "game": "snapshot",
+        "pack_type": "events",
+        "id": "evpack",
+        "id_range": "113900-113910",
+        "title": "Event Pack",
+        "special_category": "",
+        "special_category_color": "#000000",
+        "photos": [],
+        "events": [
+            {"type": "sound", "name": "myloop", "source": "C:/clips/myloop.ogg"},
+        ],
+    }
+    _write_pack_ini(str(tmp_path), data)
+    content = (tmp_path / "pack.ini").read_text(encoding="utf-8")
+    assert "sounds=myloop.ogg" in content
+
+
+def test_write_pack_ini_no_sounds_line_when_no_sound_events(tmp_path):
+    data = {
+        "game": "snapshot",
+        "pack_type": "events",
+        "id": "evpack",
+        "id_range": "113900-113910",
+        "title": "Event Pack",
+        "special_category": "",
+        "special_category_color": "#000000",
+        "photos": [],
+    }
+    _write_pack_ini(str(tmp_path), data)
+    content = (tmp_path / "pack.ini").read_text(encoding="utf-8")
+    assert "sounds=" not in content
+
+
+def test_read_pack_ini_parses_sounds(tmp_path):
+    ini = tmp_path / "pack.ini"
+    ini.write_text(
+        "[Mod]\nplugID=snapshot\nid=p\nidrange=100-199\ntitle=\"T\"\ntype=events\n\n"
+        "[Events]\nsounds=myboom.wav,mysting.mp3,myloop.ogg\n",
+        encoding="utf-8",
+    )
+    data = _read_pack_ini(str(ini), str(tmp_path))
+    sounds = [e for e in data["events"] if e["type"] == "sound"]
+    assert {s["name"] for s in sounds} == {"myboom", "mysting", "myloop"}
+
+
+def test_read_pack_ini_resolves_ogg_sound_source(tmp_path):
+    (tmp_path / "Data").mkdir()
+    (tmp_path / "Data" / "myloop.ogg").write_bytes(b"OggS")
+    ini = tmp_path / "pack.ini"
+    ini.write_text(
+        "[Mod]\nplugID=snapshot\nid=p\nidrange=100-199\ntitle=\"T\"\ntype=events\n\n"
+        "[Events]\nsounds=myloop.ogg\n",
+        encoding="utf-8",
+    )
+    data = _read_pack_ini(str(ini), str(tmp_path))
+    sound = next(e for e in data["events"] if e["type"] == "sound")
+    assert sound["source"] == str(tmp_path / "Data" / "myloop.ogg")
+
+
 def test_write_pack_ini_special_category(tmp_path):
     data = {
         "game": "snapshot",

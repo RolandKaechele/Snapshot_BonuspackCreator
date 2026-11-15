@@ -518,12 +518,25 @@ def _read_pack_ini(ini_path: str, folder: str) -> dict:
             for n in _parse_names(cfg.get("Events", "dialogs")):
                 existing_events.append({"type": "dialog", "name": n, "source": None,
                                         "content": _find_json_content(folder, n)})
+        if cfg.has_option("Events", "sounds"):
+            for n in _parse_names(cfg.get("Events", "sounds")):
+                existing_events.append({"type": "sound", "name": os.path.splitext(n)[0], "source": None})
         # Resolve image sources from the pack folder
         for ev in existing_events:
             if ev.get("type") in ("background", "overlay") and not ev.get("source"):
                 n = ev["name"]
                 for d in (os.path.join(folder, "Data"), folder):
                     for ext in (".png", ".jpg", ".jpeg", ".mp4", ".bytes", ".byte", ".dat"):
+                        p = os.path.join(d, f"{n}{ext}")
+                        if os.path.exists(p):
+                            ev["source"] = p
+                            break
+                    if ev.get("source"):
+                        break
+            elif ev.get("type") == "sound" and not ev.get("source"):
+                n = ev["name"]
+                for d in (os.path.join(folder, "Data"), folder):
+                    for ext in (".wav", ".mp3", ".ogg"):
                         p = os.path.join(d, f"{n}{ext}")
                         if os.path.exists(p):
                             ev["source"] = p
@@ -755,8 +768,15 @@ def _write_pack_ini(pack_folder: str, data: dict) -> None:
             bgs = [e.get("name", "") for e in events_list if e.get("type") == "background" and e.get("name")]
             ovs = [e.get("name", "") for e in events_list if e.get("type") == "overlay" and e.get("name")]
             dlgs = [e.get("name", "") for e in events_list if e.get("type") == "dialog" and e.get("name")]
+            snds = []
+            for e in events_list:
+                if e.get("type") != "sound" or not e.get("name"):
+                    continue
+                src = e.get("source") or ""
+                ext = os.path.splitext(src)[1].lower()
+                snds.append(e["name"] + (ext if ext in (".wav", ".mp3", ".ogg") else ".wav"))
             event_type_val = data.get("event_type", "normal")
-            if bgs or ovs or dlgs or event_type_val != "normal":
+            if bgs or ovs or dlgs or snds or event_type_val != "normal":
                 lines.append("[Events]")
                 if event_type_val != "normal":
                     lines.append(f"eventtype={event_type_val}")
@@ -764,6 +784,8 @@ def _write_pack_ini(pack_folder: str, data: dict) -> None:
                 lines.append(f"Overlays={','.join(ovs)}")
                 if dlgs:
                     lines.append(f"dialogs={','.join(dlgs)}")
+                if snds:
+                    lines.append(f"sounds={','.join(snds)}")
                 lines.append("")
 
         if chunk:

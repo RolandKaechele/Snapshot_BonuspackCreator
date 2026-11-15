@@ -2,7 +2,7 @@
 
 NOTE: This tab is only visible when the game is set to *Snapshot!*, *Snapshot! Naughty Nightmares*, or *Snapshot: Lewd Shores* on the Pack Info tab, and *Pack Type* is set to *Events* (labelled *Beach Events* in the Pack Type dropdown for Lewd Shores). The tab itself is relabelled *Beach Events* when the selected game is Lewd Shores, and *City Events* otherwise. The game only reads event data from packs declared as event packs; content added while Pack Type is *Photos* would be copied to disk but never loaded in-game.
 
-The tab is divided into three sub-tabs: *Backgrounds*, *Overlays*, and *Dialogs*.
+The tab is divided into four sub-tabs: *Backgrounds*, *Overlays*, *Sounds*, and *Dialogs*. The *Sounds* sub-tab is hidden when the game is Lewd Shores — pack-level custom sounds are a Snapshot!/Naughty Nightmares feature.
 At the top of the tab, choose the *Event Type* — `normal` (default) or `explosion`.
 
 === Backgrounds
@@ -24,6 +24,14 @@ Three overlay node commands are available in the Dialogs sub-tab's command table
 * `mod_overlayImage1` (bottom layer) and `mod_overlayImage2` (top layer) — independent layers that can both be visible at once. Images only (no video support on these two layers). Used by Lewd Shores Beach Events to show, for example, a bottom-of-screen overlay and a top-of-screen overlay simultaneously.
 
 `noOverlayImage` clears all three overlay layers at once.
+
+=== Sounds
+
+Click *Add…* to pick one or more `.wav`/`.mp3`/`.ogg` files. Each one becomes a pack-level sound, available from every scene's *Play sound* and *Play sound after 0.5 seconds* command dropdowns (grouped under its own 🎵 entry, separate from the game's own 🔊 builtin sounds, which are also selectable there but are never copied into the exported pack — they're referenced by name only, since the target game already ships them). Select a sound in the list to preview it with the built-in audio player.
+
+Click *Remove* to delete the selected sound. Removal is blocked — with an explanatory message — while any dialog node's `playSound`, `playSoundDelayed`, or `stopLoopedSound` command still references it; change or remove that command first.
+
+On export, pack sounds are copied into `Data\<name>.wav`, `.mp3`, or `.ogg` and declared in `pack.ini`'s `[Events]` section as `sounds=name1.wav,name2.mp3,...` (any other/unresolved extension falls back to `.wav`).
 
 === Dialogs
 
@@ -120,7 +128,7 @@ Shows and edits the properties of the selected node.
 | Index of an action node to trigger in parallel (`-1` = none).
 
 | *Commands table*
-| Zero or more commands executed when this node plays. Click the *Command* or *Argument* cell to open a dropdown. Use *Add* / *Remove* to manage rows. A ⚠ icon appears on the Argument cell of any overlay-image or sound command whose value doesn't resolve to a known asset; it updates live as you edit.
+| Zero or more commands executed when this node plays. Click the *Command* or *Argument* cell to open a dropdown. Use *Add* / *Remove* to manage rows. A ⚠ icon appears on the Argument cell of any overlay-image or sound command whose value doesn't resolve to a known asset — including pack-level custom sounds added on the Sounds sub-tab; it updates live as you edit. `payCash` records a cash payment made by the player at this node (used by branching dialog-choice scenes); its Argument is the amount.
 
 | *Browse…*
 | Enabled when the selected command uses an image or video argument (`showImage`, `mod_showImage`, `showEventPhoto`, `mod_overlayImage1`, `mod_overlayImage2`, `mod_overlayImage3`, `mod_addEventSellablePhoto`). Opens a file picker; the asset stem name is inserted automatically. If the selected file is an MP4 video (`.byte`), a video player widget replaces the image preview (video preview is only available for `mod_overlayImage3`).
@@ -149,6 +157,7 @@ Click *Play…* to open the Dialog Player window.
 It steps through the scene node by node, rendering a composite preview of the current background, overlay layer(s), and dialog text box exactly as they appear in-game.
 `mod_overlayImage1` (bottom) and `mod_overlayImage2` (top) are drawn together when both are set, underneath the legacy `mod_overlayImage3` slot.
 Use the *Next (N)*, *Branch (B)*, and *Action (A)* buttons to follow different flow paths.
+Use *Go to node #* + *Jump* to skip straight to any node by index without losing history — *Back* still steps through the path you've taken. Click *Edit this node…* to close the player and select the currently shown node in the Node List/Node Form panels.
 
 === Export Validation
 

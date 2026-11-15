@@ -13,6 +13,9 @@ from modules.event_widget import (
     _remap_refs,
     _write_nodes,
     validate_events,
+    _cmd_arg_broken,
+    _node_has_broken_ref,
+    _KNOWN_CMDS,
 )
 
 
@@ -158,6 +161,35 @@ def test_validate_invalid_json_is_error():
     assert len(issues) == 1
     assert issues[0][0] == "error"
     assert "JSON" in issues[0][3]
+
+
+# ── payCash command ───────────────────────────────────────────────────────────
+
+def test_paycash_is_a_known_command():
+    assert "payCash" in _KNOWN_CMDS
+
+
+# ── _cmd_arg_broken / _node_has_broken_ref with pack sound names ─────────────
+
+def test_sound_cmd_broken_without_pack_sound_name():
+    assert _cmd_arg_broken("playSound", "myCustomBoom", "", "snapshot") is True
+
+
+def test_sound_cmd_not_broken_when_pack_sound_name_matches():
+    assert _cmd_arg_broken(
+        "playSound", "myCustomBoom", "", "snapshot",
+        sound_names=frozenset({"myCustomBoom"}),
+    ) is False
+
+
+def test_node_has_broken_ref_resolved_by_pack_sound_name():
+    node = _node(vars=[{"key": "playSound", "val": "myCustomBoom"}])
+    assert _node_has_broken_ref(node, "", "snapshot") is True
+    assert _node_has_broken_ref(node, "", "snapshot", frozenset({"myCustomBoom"})) is False
+
+
+def test_empty_arg_never_broken():
+    assert _cmd_arg_broken("playSound", "", "", "snapshot") is False
 
 
 def test_validate_clean_scene_no_issues():
