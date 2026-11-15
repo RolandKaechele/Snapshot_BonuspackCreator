@@ -128,6 +128,8 @@ Each dict in `events` has a `type` of `"background"`, `"overlay"`, `"dialog"`, o
 
 A `"sound"` entry is a pack-level custom WAV/MP3/OGG sound, added from the City/Beach Events tab's *Sounds* sub-tab (Snapshot!/Naughty Nightmares only — hidden for Lewd Shores). Its `name` is referenced from any dialog node's `playSound`/`playSoundDelayed`/`stopLoopedSound` command argument, alongside the pack's bundled game sounds.
 
+`"background"`/`"overlay"` entries are deduplicated by `name` when parsed from a `pack.ini`'s `backgrounds=`/`overlays=` CSV — a name already present in `events` is not added again, so a shared asset reused by many scenes still produces only one entry.
+
 === Photo Entry
 
 [cols="1,1,3"]

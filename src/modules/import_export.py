@@ -508,12 +508,19 @@ def _read_pack_ini(ini_path: str, folder: str) -> dict:
         existing_events: list = []
         def _parse_names(raw: str) -> list[str]:
             return [n.strip() for n in raw.split(",") if n.strip()]
+        def _add_once(ev_type: str, name: str) -> None:
+            # Scenes often share one background/overlay across many entries (e.g.
+            # a reused city-event background) — the CSV lists one name per scene,
+            # so skip names already registered instead of adding duplicate rows.
+            if any(e.get("type") == ev_type and e.get("name") == name for e in existing_events):
+                return
+            existing_events.append({"type": ev_type, "name": name, "source": None})
         if cfg.has_option("Events", "backgrounds"):
             for n in _parse_names(cfg.get("Events", "backgrounds")):
-                existing_events.append({"type": "background", "name": n, "source": None})
+                _add_once("background", n)
         if cfg.has_option("Events", "overlays"):
             for n in _parse_names(cfg.get("Events", "overlays")):
-                existing_events.append({"type": "overlay", "name": n, "source": None})
+                _add_once("overlay", n)
         if cfg.has_option("Events", "dialogs"):
             for n in _parse_names(cfg.get("Events", "dialogs")):
                 existing_events.append({"type": "dialog", "name": n, "source": None,

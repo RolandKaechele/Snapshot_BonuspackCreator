@@ -31,7 +31,7 @@ Reads one ini file and returns a plain `dict`.  Key fields populated:
 | `defaults_position` … | `[Defaults]` values read as structured fields, not passthrough
 | `photos` | List of dicts — one per name in `[Photos] names=`
 | `special_types`, `special_colors` | `[Special Traits]` / `[Create your own traits]` entries
-| `events` | `[Events]` — backgrounds, overlays, dialog JSON content, pack-level custom sounds (`sounds=name.wav,...`, stored as `{"type": "sound", "name": ..., "source": ...}` entries, with the extension stripped from `name`)
+| `events` | `[Events]` — backgrounds, overlays, dialog JSON content, pack-level custom sounds (`sounds=name.wav,...`, stored as `{"type": "sound", "name": ..., "source": ...}` entries, with the extension stripped from `name`). `backgrounds=`/`overlays=` names are deduplicated on import — a name already registered is skipped rather than added again, since multiple scenes commonly reuse the same shared background/overlay asset.
 | `love_lens` | `[Hypnosis]` identity fields
 | `passthrough_sections` | Unknown sections stored verbatim for lossless re-export
 |===

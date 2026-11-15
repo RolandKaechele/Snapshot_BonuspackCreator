@@ -13,6 +13,8 @@ Supported formats: `.png`, `.jpg`, `.jpeg`, `.dat`, `.jpa`, `.pna`, `.bytes`, `.
 The selected image is previewed on the right side of the panel.
 Use *▲* / *▼* to reorder backgrounds and *Remove* to delete the selected entry.
 
+NOTE: When importing a pack whose `pack.ini` lists the same background/overlay name more than once (e.g. several scenes reusing one shared background), the list shows that name only once — duplicate names are skipped on import rather than adding a repeated entry.
+
 === Overlays
 
 Works identically to Backgrounds — same toolbar, list, and live preview pane.
