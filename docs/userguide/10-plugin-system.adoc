@@ -1,6 +1,6 @@
 == Plugin System
 
-Drop plugin packages or `.py` modules into the `plugins\` folder.
+Drop plugin packages or `.py` modules into the `plugins\` folder (already present, empty, next to the application executable).
 Each plugin must expose a `register(app)` function.
 The application loads plugins automatically at startup.
 
