@@ -23,3 +23,30 @@ To enable verbose debug logging, add `--debug`:
 ----
 venv\Scripts\python.exe src\main.py --debug
 ----
+
+=== Running the Frozen (Installed) App
+
+If you received a self-extracting installer (`SnapshotPackCreator_vYYYY-MM-DD_cu128_installer.exe`) instead of the source checkout, no Python setup is needed — the app is already frozen into a standalone bundle.
+Run the installer, pick a destination folder, and it extracts the following layout:
+
+[source]
+----
+SnapshotPackCreator\
+├── SnapshotPackCreator.exe   ← double-click to launch
+├── _internal\
+│   └── assets\               ← built-in game assets (Texture2D, AudioClip, blueprints)
+├── plugins\                  ← empty by default; drop plugin folders here
+└── docs\
+    ├── userguide.pdf
+    ├── developerguide.pdf
+    └── plugin-developerguide.pdf
+----
+
+To enable debug logging in a frozen build, launch it from a command prompt with `--debug`:
+
+[source,bat]
+----
+SnapshotPackCreator.exe --debug
+----
+
+NOTE: Everywhere else in this guide, paths like `plugins\` or the assets folder are relative to `src\` in a source checkout, or relative to `SnapshotPackCreator.exe` in a frozen install — *Tools → Manage Plugins…* and *Tools → Open Asset Folder…* always open the correct one for however you're running the app.

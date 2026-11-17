@@ -19,7 +19,7 @@ The main window is divided into:
 | *Undo* (Ctrl+Z) / *Redo* (Ctrl+Y); Settings…
 
 | Tools
-| Manage Plugins…; Edit AI Prompts…; *Find Duplicate Assets…*; *Compare Packs…*; *Pack Statistics…*; *Generate Issue Report…*; *Open Asset Folder…* (opens the built-in game assets folder in Explorer)
+| Manage Plugins…; Edit AI Prompts…; *Find Duplicate Assets…*; *Compare Packs…*; *Pack Statistics…*; *Generate Issue Report…*; *Open Asset Folder…* (opens the built-in game assets folder in Explorer — `src\assets\` in a source checkout, `_internal\assets\` in a frozen install)
 
 | Help
 | About…

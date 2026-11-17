@@ -19,6 +19,9 @@ Before running the build, ensure the following are available:
 
 | `7zCon.sfx`
 | Download *7-Zip Extra* from https://www.7-zip.org/download.html and place `7zCon.sfx` beside `7z.exe` or in `tools/`
+
+| Portable Python runtime
+| Already present under `temp\Python_*_64bit\` (bootstrapped by `cli.bat`) — reused to populate `tools\python\` in the frozen bundle, see <<frozen-bundle-layout>>
 |===
 
 === Running the Build
@@ -52,11 +55,24 @@ venv\Scripts\python.exe -m scons torch=cpu
 venv\Scripts\python.exe -m scons torch=all
 ----
 
+`scons` alone only builds the main app SFX installer — it does *not* build the per-plugin SFX installers (see <<plugin-sfx-builds>>), since repacking every bundled plugin's model files on each run made plain app builds much slower than necessary.
+
 To clean all build artefacts:
 
 [source,bat]
 ----
 venv\Scripts\python.exe -m scons -c
+----
+
+[[plugin-sfx-builds]]
+=== Plugin SFX Installers
+
+Each plugin folder under `plugins/` with an `__init__.py` gets its own torch-independent SFX installer (`dist/<plugin>_vYYYY-MM-DD_installer.exe`), built from a separate, opt-in target so they don't slow down a plain `scons` run:
+
+[source,bat]
+----
+venv\Scripts\python.exe -m scons plugins      # build only the plugin SFX installers
+venv\Scripts\python.exe -m scons plugins=1    # build the app AND every plugin SFX installer
 ----
 
 === Version String
@@ -76,9 +92,13 @@ The SCons targets run in order:
 
 . *patch_version* — writes `BUILD_VERSION` into `src/_version.py`
 . *build_docs* — converts the three umbrella `.adoc` files to PDF via `asciidoctor-pdf`
+. *install_torch* — installs the variant's torch wheel into the venv
 . *pyinstaller_build* — freezes `src/main.py` into `dist/SnapshotPackCreator/`, bundling `src/assets/` via `--add-data` and pre-creating empty `_internal\assets\` and `plugins\` folders (see <<frozen-bundle-layout>>)
+. *bundle_plugin_python* — copies a trimmed `temp\Python_*_64bit\` into `dist/SnapshotPackCreator/tools/python/` and writes `install_plugin_deps.bat`, so a frozen install can install a plugin's `requirements.txt` without a separate Python (see <<frozen-bundle-layout>>)
 . *copy_docs* — copies PDFs from `build/docs/` into `dist/SnapshotPackCreator/docs/`
 . *create_sfx* — packs the bundle into the SFX installer
+
+Plugin SFX installers (`_create_plugin_sfx`, one per `plugins/<name>/`) are a separate, opt-in target — see <<plugin-sfx-builds>> — not part of this pipeline.
 
 [[frozen-bundle-layout]]
 === Frozen Bundle Layout
@@ -94,6 +114,12 @@ The SCons targets run in order:
 
 | `dist/SnapshotPackCreator_<variant>/plugins/`
 | Sibling of the `.exe`, not `_internal\`. Deliberately excluded from `--add-data` — each plugin folder under `plugins/` is instead packed into its own torch-independent SFX installer (`scons` target `_create_plugin_sfx`) that extracts into this folder
+
+| `dist/SnapshotPackCreator_<variant>/tools/python/`
+| Trimmed copy of `temp/Python_*_64bit/` (skips `tcl`, `Doc`, `include`, `libs`, `__pycache__`) — just enough to run `pip install` against the frozen app, same Python 3.12 build used to freeze it, so there's no ABI-mismatch risk
+
+| `dist/SnapshotPackCreator_<variant>/install_plugin_deps.bat`
+| Helper that runs `tools\python\python.exe -m pip install --target _internal -r <requirements.txt>`; usage: `install_plugin_deps.bat plugins\my_plugin\requirements.txt`
 |===
 
 `SConstruct` creates both folders (even if empty) right after `pyinstaller_build` runs, so a fresh frozen install always has a `plugins\` folder ready for drop-in plugins and an `_internal\assets\` folder even if `src/assets/` were ever empty.

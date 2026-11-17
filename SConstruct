@@ -5,8 +5,11 @@
 #   2. Convert umbrella AsciiDoc files to PDF  (requires asciidoctor-pdf)
 #   3. Install the correct torch wheel into the venv
 #   4. Freeze the application with PyInstaller  (one-directory bundle per variant)
-#   5. Copy PDFs into the frozen bundle
-#   6. Pack everything into a console SFX installer  (7zCon.sfx, no UAC)
+#   5. Bundle a trimmed copy of the portable Python runtime (tools\python\) plus
+#      install_plugin_deps.bat, so users can install a plugin's requirements.txt
+#      into the frozen app without needing their own Python install
+#   6. Copy PDFs into the frozen bundle
+#   7. Pack everything into a console SFX installer  (7zCon.sfx, no UAC)
 #
 # Torch variants
 # --------------
@@ -27,9 +30,12 @@
 #
 # Usage
 # -----
-#   scons                # build the cu128 frozen app (default)
+#   scons                # build the cu128 frozen app (default); plugin SFX
+#                         # installers are NOT built unless requested (see below)
 #   scons torch=cpu      # build a CPU-only frozen app instead (rarely needed)
 #   scons torch=all      # build both variants
+#   scons plugins        # build only the per-plugin SFX installers
+#   scons plugins=1      # build the app AND every plugin SFX installer
 #   scons -c             # clean dist/ and build/ artefacts
 
 import datetime
@@ -117,6 +123,18 @@ def _find_asciidoctor_pdf():
         "asciidoctor-pdf not found.\n"
         "Install with:  gem install asciidoctor-pdf\n"
         "Ensure the Ruby gem bin directory is on PATH."
+    )
+
+
+# -- Helper: locate the portable Python runtime --------------------------------
+def _find_portable_python():
+    candidates = sorted(glob.glob(os.path.join("temp", "Python_*_64bit")))
+    for c in candidates:
+        if os.path.isfile(os.path.join(c, "python.exe")):
+            return c
+    raise FileNotFoundError(
+        "Portable Python runtime not found under temp\\Python_*_64bit\\.\n"
+        "It's required to bundle tools\\python\\ for the install_plugin_deps.bat helper."
     )
 
 
@@ -229,6 +247,43 @@ def _run_pyinstaller(target, source, env):
     os.makedirs(os.path.join(app_dir, "_internal", "assets"), exist_ok=True)
 
 
+# -- Action: bundle a trimmed portable Python for installing plugin deps ------
+_INSTALL_PLUGIN_DEPS_BAT = r"""@echo off
+rem Installs a plugin's requirements.txt into this app's _internal\ folder,
+rem using the bundled tools\python\ runtime -- no separate Python install needed.
+if "%~1"=="" (
+    echo Usage: install_plugin_deps.bat plugins\my_plugin\requirements.txt
+    exit /b 1
+)
+"%~dp0tools\\python\\python.exe" -m pip install --target "%~dp0_internal" -r "%~1"
+"""
+
+# Folders from the portable runtime not needed just to run pip + stdlib at runtime
+_PORTABLE_PYTHON_SKIP = {"tcl", "Doc", "include", "libs", "__pycache__"}
+
+
+def _bundle_plugin_python(target, source, env):
+    app_dir  = os.path.join(BIN_DIR, f"{APP_NAME}_{env['TORCH_VARIANT']}")
+    src_root = _find_portable_python()
+    dst_root = os.path.join(app_dir, "tools", "python")
+
+    if os.path.exists(dst_root):
+        _rmtree_force(dst_root)
+
+    print(f"Bundling portable Python  {src_root}  ->  {dst_root}")
+    shutil.copytree(
+        src_root, dst_root,
+        ignore=shutil.ignore_patterns(*_PORTABLE_PYTHON_SKIP),
+    )
+
+    bat_path = os.path.join(app_dir, "install_plugin_deps.bat")
+    with open(bat_path, "w", encoding="utf-8") as fh:
+        fh.write(_INSTALL_PLUGIN_DEPS_BAT)
+
+    with open(str(target[0]), "w", encoding="utf-8") as fh:
+        fh.write("plugin python bundled\n")
+
+
 # -- Action: copy PDFs into the frozen bundle ----------------------------------
 def _copy_docs(target, source, env):
     variant   = env["TORCH_VARIANT"]
@@ -338,7 +393,7 @@ build_docs = env.Command(
 env.AlwaysBuild(build_docs)
 
 
-# -- Targets 2-5: per-variant  (install torch → freeze → copy docs → sfx) ----
+# -- Targets 2-6: per-variant  (install torch → freeze → bundle plugin python → copy docs → sfx) ----
 all_sfx = []
 _prev_install = None   # enforce sequential torch installs
 
@@ -373,14 +428,23 @@ for _variant in _build_variants:
     )
     _venv.AlwaysBuild(pyinstaller_build)
 
-    # Step 4: copy PDFs into frozen bundle
+    # Step 4: bundle trimmed portable Python + install_plugin_deps.bat
+    _plugin_python_stamp = os.path.join("build", f".plugin_python_{_variant}.ok")
+    bundle_plugin_python = _venv.Command(
+        target = _plugin_python_stamp,
+        source = [pyinstaller_build],
+        action = _bundle_plugin_python,
+    )
+    _venv.AlwaysBuild(bundle_plugin_python)
+
+    # Step 5: copy PDFs into frozen bundle
     copy_docs_node = _venv.Command(
         target = _docs_bundle,
-        source = [pyinstaller_build, build_docs],
+        source = [pyinstaller_build, build_docs, bundle_plugin_python],
         action = _copy_docs,
     )
 
-    # Step 5: create SFX installer
+    # Step 6: create SFX installer
     sfx_node = _venv.Command(
         target = _sfx_exe,
         source = copy_docs_node,
@@ -466,10 +530,15 @@ for _plugin_name in _discover_plugins():
     )
     all_plugin_sfx.append(plugin_sfx_node)
 
+env.Alias("plugins", all_plugin_sfx)
 
 # -- Default + clean -----------------------------------------------------------
 env.Default(all_sfx)
-env.Default(all_plugin_sfx)
+# Plugin SFX installers are opt-in (scons plugins=1, or `scons plugins`) — not
+# part of the default target, since building every plugin on every `scons` run
+# makes a plain app build much slower than it needs to be.
+if ARGUMENTS.get("plugins", "0") == "1":  # type: ignore[name-defined]
+    env.Default(all_plugin_sfx)
 
 _clean_paths = [BIN_DIR, WORK_DIR, SPEC_DIR]
 env.Clean(all_sfx, _clean_paths)

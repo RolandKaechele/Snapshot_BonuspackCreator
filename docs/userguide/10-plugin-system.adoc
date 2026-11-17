@@ -6,17 +6,73 @@ The application loads plugins automatically at startup.
 
 See `plugins\README.md` for a minimal example.
 
+NOTE: The `plugins\` folder sits beside `src\` in a source checkout, or beside `SnapshotPackCreator.exe` in a frozen install — see <<frozen-vs-source-example>> below. *Tools → Open Plugins Folder* (in Manage Plugins) always opens the right one.
+
+[[frozen-vs-source-example]]
+=== Example: Where Plugins and Assets Live
+
+Source checkout (running via `cli.bat` / `venv\Scripts\python.exe src\main.py`):
+
+[source]
+----
+snapshot_pack_creator\
+├── src\
+│   ├── main.py
+│   └── assets\                   ← built-in game assets
+└── plugins\
+    └── my_plugin\
+        ├── __init__.py
+        └── requirements.txt
+----
+
+Frozen install (installer `.exe` or `scons`-built `dist\` folder):
+
+[source]
+----
+SnapshotPackCreator\
+├── SnapshotPackCreator.exe
+├── install_plugin_deps.bat        ← installs a plugin's requirements.txt, see below
+├── tools\
+│   └── python\                    ← bundled Python used by install_plugin_deps.bat
+├── _internal\
+│   └── assets\                   ← built-in game assets
+└── plugins\
+    └── my_plugin\
+        ├── __init__.py
+        └── requirements.txt
+----
+
+In both cases you install a plugin the same way — copy its folder into `plugins\` — only the parent folder's location differs.
+
 === Installing a Plugin
 
 . Unzip (or copy) the plugin folder into `plugins\` so that it sits next to
   the existing plugin folders, e.g. `plugins\my_plugin\`.
-. If the plugin ships a `requirements.txt`, install its extra dependencies
-  into the application venv:
+. If the plugin ships a `requirements.txt`, install its extra dependencies.
+  How you do this depends on whether you're running from a source checkout
+  or a frozen install:
 +
+--
+*Source checkout* — install into the application venv as usual:
+
 [source,bat]
 ----
 venv\Scripts\python.exe -m pip install -r plugins\my_plugin\requirements.txt
 ----
+
+*Frozen install* — use the `install_plugin_deps.bat` helper that ships next to
+`SnapshotPackCreator.exe`. It runs a Python bundled in `tools\python\`
+(the exact Python 3.12 build used to freeze the app, so there's no
+separate Python to install and no version-mismatch risk) and installs the
+packages straight into `_internal\`:
+
+[source,bat]
+----
+install_plugin_deps.bat plugins\my_plugin\requirements.txt
+----
+
+WARNING: Only pure-Python packages, or packages with prebuilt `cp312-win_amd64` wheels, can be installed this way — anything else won't be binary-compatible with the frozen app's embedded Python 3.12 runtime.
+--
 . If the plugin needs local model/data files, follow its own `README.md` for
   where to place them (usually inside the plugin folder itself).
 . Restart the application. Use *Tools → Manage Plugins…* to confirm the
