@@ -83,7 +83,7 @@ The SCons targets run in order:
 [[frozen-bundle-layout]]
 === Frozen Bundle Layout
 
-`image_utils._assets_root()` and `plugin_system._PLUGINS_DIR` resolve paths relative to the module's own location, which lands in different places once frozen:
+`image_utils._assets_root()` (exposed publicly as `assets_root()`) and `plugin_system._PLUGINS_DIR` (exposed publicly as `plugins_dir()`) resolve paths relative to the module's own location, which lands in different places once frozen:
 
 [cols="1,3"]
 |===

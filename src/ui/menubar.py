@@ -117,6 +117,12 @@ def build_menubar(window: QMainWindow) -> None:
     act_issue_report.triggered.connect(window.on_generate_issue_report)
     tools_menu.addAction(act_issue_report)
 
+    tools_menu.addSeparator()
+
+    act_open_assets = QAction("Open &Asset Folder…", window)
+    act_open_assets.triggered.connect(window.on_open_asset_folder)
+    tools_menu.addAction(act_open_assets)
+
     # Help
     help_menu = bar.addMenu("&Help")
 

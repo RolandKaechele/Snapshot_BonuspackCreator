@@ -46,6 +46,8 @@ Every `PackManager.save()` also writes a timestamped copy of the just-saved JSON
 `modules/plugin_system.py` reads `src/plugin_config.json` (`load_disabled_plugins()`) before importing each discovered module in `load_plugins()`, skipping any module name listed under `"disabled"`.
 `modules/plugin_dialog.py`'s `PluginManagerDialog` (opened via `Tools → Manage Plugins…`) shows every *discovered* plugin (not just loaded ones) in a table with Enabled / Name / Version / Status / Description columns, and writes the unchecked set back via `save_disabled_plugins()` on close.
 Changes take effect on the next restart, since plugins are only imported once at startup.
+Its *Open Plugins Folder* button calls `plugin_system.plugins_dir()` and `os.startfile()` to open `plugins\` in Explorer, same resolution logic described in <<frozen-bundle-layout>>.
+Likewise, `Tools → Open Asset Folder…` (`MainWindow.on_open_asset_folder()`) opens `image_utils.assets_root()` the same way.
 
 === Plugin Hardware Gating
 

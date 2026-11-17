@@ -261,6 +261,17 @@ class MainWindow(QMainWindow):
         game = self._pack_manager.get("game", "")
         PromptEditorDialog(self, initial_game=game).exec()
 
+    def on_open_asset_folder(self) -> None:
+        from modules.image_utils import assets_root
+        folder = assets_root()
+        _dlog("MainWindow.on_open_asset_folder", folder)
+        try:
+            os.makedirs(folder, exist_ok=True)
+            os.startfile(folder)
+        except OSError as exc:
+            show_error(self, "Open Asset Folder", str(exc), exc=exc,
+                      tag="MainWindow.on_open_asset_folder")
+
     # ── Analysis tools ───────────────────────────────────────────────────
 
     def on_find_duplicates(self) -> None:

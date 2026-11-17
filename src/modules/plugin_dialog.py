@@ -1,5 +1,6 @@
 """Plugin Manager dialog — view loaded/disabled plugins and toggle them on/off."""
 
+import os
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import ( #type: ignore
@@ -8,7 +9,9 @@ from PyQt6.QtWidgets import ( #type: ignore
 )
 from PyQt6.QtCore import Qt #type: ignore
 
-from modules.plugin_system import load_disabled_plugins, save_disabled_plugins
+from app_debug import dlog as _dlog
+from ui.dialogs import show_error
+from modules.plugin_system import load_disabled_plugins, save_disabled_plugins, plugins_dir
 
 if TYPE_CHECKING:
     from modules.plugin_system import PluginSystem
@@ -106,11 +109,24 @@ class PluginManagerDialog(QDialog):
         layout.addWidget(self._table, 1)
 
         buttons = QHBoxLayout()
+        btn_open_folder = QPushButton("Open Plugins Folder")
+        btn_open_folder.clicked.connect(self._on_open_plugins_folder)
+        buttons.addWidget(btn_open_folder)
+        buttons.addStretch()
         btn_close = QPushButton("Close")
         btn_close.clicked.connect(self._on_close)
-        buttons.addStretch()
         buttons.addWidget(btn_close)
         layout.addLayout(buttons)
+
+    def _on_open_plugins_folder(self) -> None:
+        folder = plugins_dir()
+        _dlog("PluginManagerDialog._on_open_plugins_folder", folder)
+        try:
+            os.makedirs(folder, exist_ok=True)
+            os.startfile(folder)
+        except OSError as exc:
+            show_error(self, "Open Plugins Folder", str(exc), exc=exc,
+                       tag="PluginManagerDialog._on_open_plugins_folder")
 
     def _on_close(self) -> None:
         disabled: set[str] = set()

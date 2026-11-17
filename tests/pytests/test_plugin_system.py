@@ -5,7 +5,7 @@ import sys
 import types
 import pytest
 
-from modules.plugin_system import PluginSystem
+from modules.plugin_system import PluginSystem, plugins_dir
 
 
 class _FakeApp:
@@ -179,3 +179,9 @@ def test_loaded_plugin_names_returns_copy(monkeypatch, tmp_path):
     names = ps.loaded_plugin_names()
     names.append("injected")
     assert "injected" not in ps.loaded_plugin_names()
+
+
+def test_plugins_dir_returns_normalized_path(monkeypatch, tmp_path):
+    raw = str(tmp_path / "plugins" / ".." / "plugins")
+    monkeypatch.setattr("modules.plugin_system._PLUGINS_DIR", raw)
+    assert plugins_dir() == os.path.normpath(raw)

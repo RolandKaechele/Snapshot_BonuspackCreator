@@ -71,8 +71,17 @@ def resolve_audio_asset(name: str, folder: str) -> str:
 
 
 def _assets_root() -> str:
-    """Return the src/assets/ folder (two levels up from this file)."""
+    """Return the assets/ folder (two levels up from this file).
+
+    Resolves correctly whether running from source (src/assets/) or frozen
+    (_internal/assets/), since both are derived from this module's own
+    on-disk location (see developerguide 09)."""
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
+
+
+def assets_root() -> str:
+    """Public accessor for _assets_root(), e.g. for a "Open Asset Folder" menu action."""
+    return _assets_root()
 
 
 def game_asset_dir(asset_type: str, game: str) -> str:

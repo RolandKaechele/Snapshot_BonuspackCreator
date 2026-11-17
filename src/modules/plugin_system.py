@@ -52,6 +52,13 @@ def save_disabled_plugins(disabled: set[str]) -> None:
         json.dump({"disabled": sorted(disabled)}, f, indent=2)
 
 
+def plugins_dir() -> str:
+    """Return the plugins/ folder path — resolves correctly whether running
+    from source (sibling of src/) or frozen (sibling of the .exe), since both
+    are derived from this module's own location (see developerguide 09)."""
+    return os.path.normpath(_PLUGINS_DIR)
+
+
 class PluginSystem:
     """Discovers and loads plugin packages from the plugins/ directory."""
 

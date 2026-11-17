@@ -40,6 +40,8 @@ NOTE: Users can disable your plugin from *Tools → Manage Plugins…* without u
 | Re-reads pack data into all tab widgets; call after modifying pack data
 |===
 
+TIP: `modules.plugin_system.plugins_dir()` and `modules.image_utils.assets_root()` return the correct on-disk folder for the plugins/ and assets/ directories whether the app is running from source or frozen — use these instead of hardcoding relative paths if your plugin needs to locate either folder.
+
 === Debug Logging
 
 Import and use `dlog` to write to the debug console (active only with `--debug`):

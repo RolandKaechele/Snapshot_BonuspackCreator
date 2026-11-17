@@ -53,3 +53,5 @@ Re-check a disabled plugin (and restart) to re-enable it.
 The choice is stored in `plugin_config.json` next to `registry.json`.
 
 NOTE: Plugins marked *Unsupported Hardware* (e.g. `moss_image` on a GPU with less VRAM than it needs) have their checkbox greyed out and can't be checked — hover the row for the exact requirement and what was detected on your machine.
+
+Click *Open Plugins Folder* at the bottom of the dialog to open `plugins\` directly in Explorer — handy for dropping in a new plugin or checking an existing one's files without hunting for the folder manually.
