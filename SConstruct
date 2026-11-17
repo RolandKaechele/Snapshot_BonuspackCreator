@@ -189,6 +189,17 @@ def _rmtree_force(path):
         shutil.rmtree(path, onerror=_on_error)
 
 
+def _mirror_dir_structure(src_root, dst_root):
+    """Recreate every sub-folder of src_root under dst_root, copying no files."""
+    os.makedirs(dst_root, exist_ok=True)
+    if not os.path.isdir(src_root):
+        return
+    for dirpath, dirnames, _filenames in os.walk(src_root):
+        rel = os.path.relpath(dirpath, src_root)
+        dest = dst_root if rel == "." else os.path.join(dst_root, rel)
+        os.makedirs(dest, exist_ok=True)
+
+
 def _run_pyinstaller(target, source, env):
     py      = _python()
     variant = env["TORCH_VARIANT"]
@@ -224,13 +235,6 @@ def _run_pyinstaller(target, source, env):
     if os.path.isfile(city_events_templates_path):
         cmd += ["--add-data", os.path.abspath(city_events_templates_path) + os.pathsep + "."]
 
-    # Built-in game assets (src/assets/<AudioClip|blueprints|Texture2D>/) are read
-    # at runtime via image_utils._assets_root(), which resolves to _internal/assets
-    # inside the frozen onedir bundle (see image_utils.py / plugin_system.py).
-    assets_path = os.path.join("src", "assets")
-    if os.path.isdir(assets_path):
-        cmd += ["--add-data", os.path.abspath(assets_path) + os.pathsep + "assets"]
-
     cmd.append(str(source[0]))
 
     print(f"Running PyInstaller [{variant}] ...")
@@ -242,9 +246,13 @@ def _run_pyinstaller(target, source, env):
     # users have an obvious drop-in target without installing a plugin first.
     os.makedirs(os.path.join(app_dir, "plugins"), exist_ok=True)
 
-    # Guard against image_utils._assets_root() resolving to a missing folder
-    # if src/assets/ was ever empty (--add-data skips dirs with no content).
-    os.makedirs(os.path.join(app_dir, "_internal", "assets"), exist_ok=True)
+    # Built-in game assets (src/assets/<AudioClip|blueprints|Texture2D>/<game>/) are
+    # read at runtime via image_utils._assets_root(), which resolves to _internal/assets
+    # inside the frozen onedir bundle (see image_utils.py / plugin_system.py).
+    # The actual asset files (~GBst) are deliberately NOT
+    # bundled here — only the directory structure is recreated, so a fresh install
+    # has the right folders ready for assets to be dropped in separately.
+    _mirror_dir_structure(os.path.join("src", "assets"), os.path.join(app_dir, "_internal", "assets"))
 
 
 # -- Action: bundle a trimmed portable Python for installing plugin deps ------
