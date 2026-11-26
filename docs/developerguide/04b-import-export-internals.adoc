@@ -49,10 +49,11 @@ After reading all parts, `run_import` merges them:
 
 * `photos` lists are concatenated.
 * `special_types` / `special_colors` are union-merged (deduplication by exact string).
-* **Per-part trait lists are captured before merging** and stored as `special_types_parts` / `special_colors_parts` (list of lists, one inner list per ini file).
-  This allows export to write each part's traits back to the correct exported ini rather than duplicating the full merged set everywhere.
+* **Per-part trait lists, idrange, and photo count are captured before merging** and stored as `special_types_parts` / `special_colors_parts` / `id_range_parts` / `photo_count_parts` (one entry per ini file, in ini order).
+  This allows export to write each part's traits — and its original `idrange` — back to the correct exported ini instead of duplicating the full merged set everywhere or recomputing a contiguous +100-wide slot that may not match the original (see ini splitting below).
 * `id` has trailing digits stripped (`"mypack1"` → `"mypack"`).
-* `title` has `" Part N"` suffix stripped.
+* `title` has a trailing `" Part N"` suffix stripped, where `N` is either digits (`"Part 1"`) or a Roman numeral (`"Part I"`, `"Part III"`) — real packs use either form.
+* `id_range` is replaced with every part's range joined by `;` (e.g. `"105800-105899;105900-105999;125900-126199"`) instead of only part 1's — this is what the Pack Info tab's single ID Range field shows/edits, and what `photo_registry.parse_id_ranges()` / `compute_photo_ids()` understand (each `;`-separated segment is filled in order before moving to the next).
 
 ==== Import-time validation
 
@@ -82,7 +83,11 @@ After the merged pack is loaded (`pm.data.update(pack_data)`) and views are refr
 
 Photos are normally chunked at 100 per file, producing a separate ini file per chunk (`pack.ini` for single-part, `{id}1.ini` / `{id}2.ini` … for multi-part).
 
-**Exception — wide-idrange preservation:** if the declared `idrange` already spans more than 100 IDs and is wide enough to cover every photo (`range_width > 100 and range_width >= photo_count`), the pack is kept as a **single** `pack.ini` with the original `idrange` written verbatim, instead of being force-split into 100-ID parts. This matches official packs that ship >100 photos under one wide range (e.g. `murderclub`: 104 photos under `idrange=200100-200299`). When the declared range is *not* wide enough for the photo count, the normal 100-per-part auto-split is used as a fallback.
+**Exception — wide-idrange preservation:** if the declared `idrange` already spans more than 100 IDs and is wide enough to cover every photo (`range_width > 100 and range_width >= photo_count`), the pack is kept as a **single** `pack.ini` with the original `idrange` written verbatim, instead of being force-split into 100-ID parts. This matches official packs that ship >100 photos under one wide range (e.g. `murderclub`: 104 photos under `idrange=200100-200299`).
+
+**Exception — original per-part idrange preservation:** when the pack was imported from multiple ini files (`id_range_parts` / `photo_count_parts` present) and the per-part photo counts still sum to the current total photo count (i.e. no photos were added/removed since import), each exported part reuses its *original* `idrange` and photo-count boundary from `id_range_parts[part_idx]` instead of a computed `range_start + part_idx * 100` slot. This matters for packs whose parts don't use contiguous 100-ID slots (e.g. a disjoint third part range far from parts one/two) — recomputing would silently reassign IDs never actually reserved for that part. When the photo counts no longer match (photos were added/removed in the UI), this falls back to the normal 100-per-part auto-split.
+
+When neither exception applies, the normal 100-per-part auto-split (`range_start + part_idx * 100`) is used.
 
 **Issue-flagged photos:** for each photo, `_write_pack_ini()` calls `issue_report.effective_photo_traits(photo)`, which returns the photo's `position`/`type`/`color` overridden by `issue_correction` when `issue_flag` is set. The ini is written with these *corrected* values; the photo dict's original (wrong) values are left untouched in memory so the Issue Report can still show both. See xref:07-pack-json-schema.adoc[Pack JSON Schema] for the `issue_flag`/`issue_note`/`issue_correction` fields.
 
@@ -91,7 +96,7 @@ Photos are normally chunked at 100 per file, producing a separate ini file per c
 For each part (when splitting does occur):
 
 * `id` and `title` get a part-number suffix appended (`mypack1`, `"My Pack Part 1"`).
-* `idrange` is incremented by 100 per part.
+* `idrange` is incremented by 100 per part, unless `id_range_parts` is being preserved (see above), in which case the original per-part range is reused verbatim.
 * `[Special Traits]` / `[Create your own traits]` entries come from `special_types_parts[part_idx]` when that list exists, falling back to the flat `special_types` list for packs created from scratch in the UI.
 
 Key name differences between games:
@@ -138,4 +143,8 @@ The following keys in `pm.data` are owned by `import_export.py`:
 | `source_folder` | `str` | Absolute path of the imported pack folder; used by orphaned-files tab and export
 | `special_types_parts` | `list[list[str]]` | Per-part trait lists; only present after multi-ini import
 | `special_colors_parts` | `list[list[str]]` | Per-part color lists; only present after multi-ini import
+| `id_range_parts` | `list[str]` | Per-part `idrange` strings, in ini order; only present after multi-ini import
+| `photo_count_parts` | `list[int]` | Per-part photo counts, in ini order; only present after multi-ini import
 |===
+
+NOTE: After a multi-ini import, `id_range` itself becomes a `;`-joined string of every part's range (see above) rather than just part 1's. `modules/photo_registry.py`'s `parse_id_range()` still parses only the first segment (for single-range callers); `parse_id_ranges()` parses every segment, and `compute_photo_ids()` uses it to assign sequential IDs per segment, moving to the next range once the current one's width is filled.

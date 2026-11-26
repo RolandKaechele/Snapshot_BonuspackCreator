@@ -141,7 +141,10 @@ class PackInfoWidget(QWidget):
         idrange_row = QHBoxLayout()
         idrange_row.setContentsMargins(0, 0, 0, 0)
         self._edit_idrange = QLineEdit()
-        self._edit_idrange.setPlaceholderText("e.g. 100100-100199  (auto-assigned if empty)")
+        self._edit_idrange.setPlaceholderText(
+            "e.g. 100100-100199  (auto-assigned if empty; multi-part packs use "
+            "100100-100199;100200-100299;...)"
+        )
         set_tip(self._edit_idrange, "pack_idrange")
         self._btn_discord = QPushButton("🎮 Get ID on Discord")
         self._btn_discord.setToolTip(

@@ -35,6 +35,8 @@ TIPS: dict[str, str] = {
     "pack_idrange": (
         "Photo ID range reserved in the game's PhotoDictionary.\n"
         "Format: START-END, e.g. 100100-100199.\n"
+        "Multi-part packs (imported from several .ini files) show/accept one \n"
+        "range per part, separated by ';', e.g. 100100-100199;100200-100299.\n"
         "Rules enforced by the game:\n"
         "  • Must be ≥ 100000\n"
         "  • Span must be exactly 100 (END = START + 99)\n"

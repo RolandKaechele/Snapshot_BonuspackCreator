@@ -36,20 +36,44 @@ def save_registry(registry: dict[str, Any], path: str | None = None) -> None:
 
 
 def parse_id_range(id_range: str) -> tuple[int, int] | None:
-    """Parse a ``START-END`` id range string. Returns ``(start, end)`` or ``None`` if invalid."""
-    m = re.match(r"^\s*(\d+)\s*-\s*(\d+)\s*$", id_range or "")
+    """Parse a ``START-END`` id range string. Returns ``(start, end)`` or ``None`` if invalid.
+    For a multi-part pack's combined ``"START1-END1;START2-END2;..."`` string (see
+    ``parse_id_ranges()``), only the first segment is parsed."""
+    first = (id_range or "").split(";", 1)[0]
+    m = re.match(r"^\s*(\d+)\s*-\s*(\d+)\s*$", first)
     if not m:
         return None
     return int(m.group(1)), int(m.group(2))
 
 
+def parse_id_ranges(id_range: str) -> list[tuple[int, int]]:
+    """Parse a ``;``-delimited list of ``START-END`` id ranges (one pack can reserve
+    several disjoint ranges when imported from a multi-part/multi-ini pack).
+    Returns ``[(start, end), ...]``; invalid/empty segments are skipped."""
+    ranges: list[tuple[int, int]] = []
+    for segment in (id_range or "").split(";"):
+        m = re.match(r"^\s*(\d+)\s*-\s*(\d+)\s*$", segment)
+        if m:
+            ranges.append((int(m.group(1)), int(m.group(2))))
+    return ranges
+
+
 def compute_photo_ids(id_range: str, photo_names: list[str]) -> list[tuple[int, str]]:
-    """Return ``[(photo_id, photo_name), ...]``, IDs assigned sequentially from the range start."""
-    parsed = parse_id_range(id_range)
-    if parsed is None:
+    """Return ``[(photo_id, photo_name), ...]``, IDs assigned sequentially from each
+    range's start; once a range is filled, assignment continues from the start of the
+    next ``;``-delimited range (if any). Stops once every photo has an ID."""
+    ranges = parse_id_ranges(id_range)
+    if not ranges:
         return []
-    start, _end = parsed
-    return [(start + offset, name) for offset, name in enumerate(photo_names)]
+    result: list[tuple[int, str]] = []
+    idx = 0
+    for start, end in ranges:
+        for offset in range(max(end - start + 1, 0)):
+            if idx >= len(photo_names):
+                return result
+            result.append((start + offset, photo_names[idx]))
+            idx += 1
+    return result
 
 
 def merge_pack_entries(

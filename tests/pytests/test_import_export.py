@@ -510,6 +510,40 @@ def test_import_from_folder_no_warning_within_limit(tmp_path, qapp, monkeypatch)
     assert warnings == []
 
 
+def _write_part_ini(tmp_path, filename, pack_id, id_range, title_part, n_photos, name_prefix):
+    names = ",".join(f"{name_prefix}{i}" for i in range(n_photos))
+    lines = [
+        "[Mod]", "plugID=snapshot", f"id={pack_id}", f"idrange={id_range}",
+        f'title="Mihepos School\'s Out {title_part}"',
+        "[Photos]", f"names={names}",
+    ]
+    for i in range(n_photos):
+        lines.append(f"{name_prefix}{i}.position=upskirt")
+        lines.append(f"{name_prefix}{i}.type=plain")
+        lines.append(f"{name_prefix}{i}.color=white")
+    (tmp_path / filename).write_text("\n".join(lines), encoding="utf-8")
+
+
+def test_import_from_folder_strips_roman_numeral_part_suffix_and_captures_parts(tmp_path, qapp, monkeypatch):  # noqa: ARG001
+    """Reproduces the miheposschoolsout pack: 3 inis, disjoint idrange on part 3,
+    Roman-numeral 'Part N' titles, and a 3rd id that doesn't share part 1/2's stem."""
+    from modules.import_export import ImportExportManager
+
+    _write_part_ini(tmp_path, "pack 1.ini", "schoolsout1", "105800-105899", "Part I", 3, "schoolsout1")
+    _write_part_ini(tmp_path, "pack 2.ini", "schoolsout2", "105900-105999", "Part II", 3, "schoolsout2")
+    _write_part_ini(tmp_path, "pack 3.ini", "miheposschoolsout", "125900-126199", "Part III", 3, "miheposschoolsout")
+
+    manager = ImportExportManager(_FakeParent())
+    manager._import_from_folder(str(tmp_path))
+
+    data = manager._parent._pack_manager.data
+    assert data["title"] == "Mihepos School's Out"
+    assert data["id_range_parts"] == ["105800-105899", "105900-105999", "125900-126199"]
+    assert data["photo_count_parts"] == [3, 3, 3]
+    assert len(data["photos"]) == 9
+    # The single ID Range field must show every part, not just part 1's.
+    assert data["id_range"] == "105800-105899;105900-105999;125900-126199"
+
 
 # ── _export_photo_files ──────────────────────────────────────────────────────
 
@@ -631,6 +665,48 @@ def test_write_pack_ini_no_split_below_100(tmp_path):
     _write_pack_ini(str(tmp_path), data)
     assert (tmp_path / "pack.ini").exists()
     assert not (tmp_path / "small1.ini").exists()
+
+
+def test_write_pack_ini_preserves_original_part_idranges(tmp_path):
+    """A disjoint, non-contiguous part-3 idrange must round-trip verbatim instead
+    of being overwritten with a computed range_start + part_idx*100 slot."""
+    photos = (
+        [{"name": f"a{i}", "position": "upskirt", "type": "plain", "color": "white", "source": None} for i in range(3)]
+        + [{"name": f"b{i}", "position": "upskirt", "type": "plain", "color": "white", "source": None} for i in range(3)]
+        + [{"name": f"c{i}", "position": "upskirt", "type": "plain", "color": "white", "source": None} for i in range(3)]
+    )
+    data = {
+        "game": "snapshot", "pack_type": "photos",
+        "id": "schoolsout", "id_range": "105800-105899", "title": "Mihepos School's Out",
+        "special_category": "", "special_category_color": "#000000",
+        "photos": photos,
+        "id_range_parts": ["105800-105899", "105900-105999", "125900-126199"],
+        "photo_count_parts": [3, 3, 3],
+    }
+    _write_pack_ini(str(tmp_path), data)
+    c1 = (tmp_path / "schoolsout1.ini").read_text(encoding="utf-8")
+    c2 = (tmp_path / "schoolsout2.ini").read_text(encoding="utf-8")
+    c3 = (tmp_path / "schoolsout3.ini").read_text(encoding="utf-8")
+    assert "idrange=105800-105899" in c1
+    assert "idrange=105900-105999" in c2
+    assert "idrange=125900-126199" in c3
+
+
+def test_write_pack_ini_falls_back_when_photo_counts_changed(tmp_path):
+    """If photos were added/removed since import, the recorded part boundaries no
+    longer match the total, so the normal auto-chunking behavior applies instead."""
+    photos = [{"name": f"p{i}", "position": "upskirt", "type": "plain",
+               "color": "white", "source": None} for i in range(9)]
+    data = {
+        "game": "snapshot", "pack_type": "photos",
+        "id": "schoolsout", "id_range": "105800-105899", "title": "Mihepos School's Out",
+        "special_category": "", "special_category_color": "#000000",
+        "photos": photos,
+        "id_range_parts": ["105800-105899", "105900-105999", "125900-126199"],
+        "photo_count_parts": [3, 3, 2],  # sums to 8, but there are 9 photos now
+    }
+    _write_pack_ini(str(tmp_path), data)
+    assert (tmp_path / "pack.ini").exists()
 
 
 # ── Special Traits and aliases ───────────────────────────────────────────────

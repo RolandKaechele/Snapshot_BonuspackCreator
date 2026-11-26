@@ -76,13 +76,18 @@ class ImportExportManager:
         self._parent._refresh_all()
         try:
             pack_data = _read_pack_ini(ini_paths[0], folder)
-            # Capture per-part traits before merging so export can restore them per-part
+            # Capture per-part traits/idrange/photo-count before merging so export can
+            # restore them per-part instead of recomputing contiguous 100-ID slots.
             types_parts  = [list(pack_data.get("special_types",  []))]
             colors_parts = [list(pack_data.get("special_colors", []))]
+            id_range_parts = [pack_data.get("id_range", "")]
+            photo_count_parts = [len(pack_data.get("photos", []))]
             for extra_ini in ini_paths[1:]:
                 extra = _read_pack_ini(extra_ini, folder)
                 types_parts.append(list(extra.get("special_types",  [])))
                 colors_parts.append(list(extra.get("special_colors", [])))
+                id_range_parts.append(extra.get("id_range", ""))
+                photo_count_parts.append(len(extra.get("photos", [])))
                 pack_data.setdefault("photos", []).extend(extra.get("photos", []))
                 # Merge per-part trait lists without duplicates
                 for key in ("special_types", "special_colors"):
@@ -95,10 +100,16 @@ class ImportExportManager:
                 # Strip trailing digit(s) added by the per-part split, e.g. "mpack1" → "mpack"
                 raw_id = pack_data.get("id", "")
                 pack_data["id"] = raw_id.rstrip("0123456789") or raw_id
-                # Strip " Part N" suffix from title, e.g. "My Pack Part 1" → "My Pack"
-                pack_data["title"] = re.sub(r"\s+[Pp]art\s+\d+\s*$", "", pack_data.get("title", "")).strip()
+                # Strip " Part N" suffix from title — numeric ("Part 1") or Roman ("Part I")
+                pack_data["title"] = re.sub(r"\s+[Pp]art\s+(?:[0-9]+|[IVXLCDM]+)\s*$",
+                                            "", pack_data.get("title", "")).strip()
                 pack_data["special_types_parts"]  = types_parts
                 pack_data["special_colors_parts"] = colors_parts
+                pack_data["id_range_parts"]    = id_range_parts
+                pack_data["photo_count_parts"] = photo_count_parts
+                # Show/validate every part's range instead of only part 1's — the
+                # UI's single ID Range field would otherwise hide parts 2+ entirely.
+                pack_data["id_range"] = ";".join(r for r in id_range_parts if r)
             pm.data.update(pack_data)
             pm.data["source_folder"] = folder  # used by orphaned-files tab
             self._parent._refresh_all()
@@ -624,8 +635,30 @@ def _write_pack_ini(pack_folder: str, data: dict) -> None:
     preserve_single_range = (
         range_width is not None and range_width > 100 and range_width >= max(total_photos, 1)
     )
+
+    # Preserve each original part's declared idrange and photo-count boundaries
+    # when the pack was imported as a multi-part pack and the per-part photo
+    # counts still add up to the current total — instead of recomputing
+    # contiguous +100-wide slots that discard a later part's real, possibly
+    # non-contiguous idrange (e.g. official packs with a disjoint part 3 range).
+    id_range_parts = data.get("id_range_parts")
+    photo_count_parts = data.get("photo_count_parts")
+    preserve_original_parts = (
+        not preserve_single_range
+        and id_range_parts and photo_count_parts
+        and len(id_range_parts) == len(photo_count_parts)
+        and len(photo_count_parts) > 1
+        and sum(photo_count_parts) == total_photos
+    )
+
     if preserve_single_range:
         chunks = [photos]
+    elif preserve_original_parts:
+        chunks = []
+        start = 0
+        for count in photo_count_parts:
+            chunks.append(photos[start:start + count])
+            start += count
     else:
         chunks = [photos[i:i + 100] for i in range(0, max(total_photos, 1), 100)]
     multi = len(chunks) > 1
@@ -636,6 +669,8 @@ def _write_pack_ini(pack_folder: str, data: dict) -> None:
         part_title = f"{title} Part {part_num}" if multi else title
         if preserve_single_range:
             part_range = id_range
+        elif preserve_original_parts:
+            part_range = id_range_parts[part_idx] or id_range
         elif range_start is not None:
             part_start = range_start + part_idx * 100
             part_range = f"{part_start}-{part_start + 99}"

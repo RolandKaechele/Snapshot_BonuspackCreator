@@ -5,7 +5,7 @@ import os
 import pytest
 from modules.photo_registry import (
     default_registry_path, load_registry, save_registry,
-    parse_id_range, compute_photo_ids, merge_pack_entries, find_conflicts,
+    parse_id_range, parse_id_ranges, compute_photo_ids, merge_pack_entries, find_conflicts,
 )
 
 
@@ -49,6 +49,30 @@ def test_parse_id_range(id_range, expected):
     assert parse_id_range(id_range) == expected
 
 
+def test_parse_id_range_multipart_returns_first_segment():
+    assert parse_id_range("105800-105899;105900-105999;125900-126199") == (105800, 105899)
+
+
+def test_parse_id_ranges_single_segment():
+    assert parse_id_ranges("100100-100199") == [(100100, 100199)]
+
+
+def test_parse_id_ranges_multi_segment():
+    assert parse_id_ranges("105800-105899;105900-105999;125900-126199") == [
+        (105800, 105899), (105900, 105999), (125900, 126199),
+    ]
+
+
+def test_parse_id_ranges_skips_invalid_segments():
+    assert parse_id_ranges("105800-105899;bogus;125900-126199") == [
+        (105800, 105899), (125900, 126199),
+    ]
+
+
+def test_parse_id_ranges_invalid_returns_empty_list():
+    assert parse_id_ranges("invalid") == []
+
+
 def test_compute_photo_ids_assigns_sequential_ids():
     photo_ids = compute_photo_ids("100100-100199", ["photo001", "photo002", "photo003"])
     assert photo_ids == [(100100, "photo001"), (100101, "photo002"), (100102, "photo003")]
@@ -56,6 +80,26 @@ def test_compute_photo_ids_assigns_sequential_ids():
 
 def test_compute_photo_ids_invalid_range_returns_empty():
     assert compute_photo_ids("invalid", ["a"]) == []
+
+
+def test_compute_photo_ids_multi_range_spans_parts():
+    names = [f"a{i}" for i in range(3)] + [f"b{i}" for i in range(3)] + [f"c{i}" for i in range(3)]
+    photo_ids = compute_photo_ids("3-5;103-105;203-502", names)
+    assert photo_ids[:3] == [(3, "a0"), (4, "a1"), (5, "a2")]
+    assert photo_ids[3:6] == [(103, "b0"), (104, "b1"), (105, "b2")]
+    assert photo_ids[6:9] == [(203, "c0"), (204, "c1"), (205, "c2")]
+
+
+def test_compute_photo_ids_oversized_final_range_still_starts_at_its_own_start():
+    # Mirrors a real pack: parts 1-2 declare a range exactly as wide as their
+    # photo count, the final part reserves more IDs than it uses (headroom).
+    names = [f"a{i}" for i in range(2)] + [f"b{i}" for i in range(2)] + [f"c{i}" for i in range(3)]
+    photo_ids = compute_photo_ids("100-101;200-201;300-399", names)
+    assert photo_ids == [
+        (100, "a0"), (101, "a1"),
+        (200, "b0"), (201, "b1"),
+        (300, "c0"), (301, "c1"), (302, "c2"),
+    ]
 
 
 def test_compute_photo_ids_empty_names_returns_empty():
