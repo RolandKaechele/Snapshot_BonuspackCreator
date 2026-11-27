@@ -84,6 +84,7 @@ class MainWindow(QMainWindow):
         self._tabs.setTabVisible(6, False)
 
         self._pack_info_widget.game_changed.connect(self._on_game_changed)
+        self._pack_info_widget.parts_changed.connect(self._picture_widget.refresh_parts)
         self._event_widget.photos_changed.connect(self._picture_widget.refresh)
         self.setCentralWidget(self._tabs)
         self._on_game_changed(self._pack_manager.get("game", "snapshot"))

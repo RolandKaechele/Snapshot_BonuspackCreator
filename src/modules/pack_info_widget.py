@@ -7,12 +7,14 @@ from PyQt6.QtWidgets import (  # type: ignore
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QComboBox, QGroupBox, QFormLayout, QScrollArea,
     QPushButton, QListWidget, QTabWidget, QSizePolicy,
+    QDialog, QDialogButtonBox,
 )
 from PyQt6.QtGui import QColor, QDesktopServices  # type: ignore
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal  # type: ignore
 
 from app_debug import dlog as _dlog
 from modules.tooltips import set_tip
+from modules import pack_parts
 from modules.photo_registry import default_registry_path, load_registry, compute_photo_ids, find_conflicts
 from modules.picture_widget import (
     NAUGHTY_NIGHTMARES_POSITIONS, NAUGHTY_NIGHTMARES_TYPES, NAUGHTY_NIGHTMARES_COLORS,
@@ -84,10 +86,40 @@ _ALL_PACK_TYPES = [("Photos", "photos"), ("Events", "events"), ("Love Lens", "lo
 _NAUGHTY_NIGHTMARES_PACK_TYPES = [("Photos", "photos")]
 
 
+class _PartEditDialog(QDialog):
+    """Add/Edit dialog for a single declared pack part (Pack ID, Title, ID Range, Filename)."""
+
+    def __init__(self, parent, part_id: str = "", title: str = "", id_range: str = "",
+                 filename: str = "") -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Pack Part")
+        form = QFormLayout(self)
+        self._edit_id = QLineEdit(part_id)
+        self._edit_title = QLineEdit(title)
+        self._edit_range = QLineEdit(id_range)
+        self._edit_range.setPlaceholderText("e.g. 100100-100199")
+        self._edit_filename = QLineEdit(filename)
+        self._edit_filename.setPlaceholderText("e.g. pack 1.ini  (blank = \"<Part ID>.ini\")")
+        form.addRow("Part ID:", self._edit_id)
+        form.addRow("Title:", self._edit_title)
+        form.addRow("ID Range:", self._edit_range)
+        form.addRow("Filename:", self._edit_filename)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def values(self) -> tuple[str, str, str, str]:
+        return (self._edit_id.text().strip(), self._edit_title.text().strip(),
+                self._edit_range.text().strip(), self._edit_filename.text().strip())
+
+
 class PackInfoWidget(QWidget):
     """First tab: pack identity, defaults, special category, and special traits."""
 
     game_changed = pyqtSignal(str)  # emits "snapshot", "lewdshores", or "naughtynightmares"
+    parts_changed = pyqtSignal()  # emits whenever the declared Pack Parts list changes
 
     def __init__(self, pack_manager: "PackManager") -> None:
         super().__init__()
@@ -179,8 +211,108 @@ class PackInfoWidget(QWidget):
         self._edit_idrange.textChanged.connect(self._save_identity)
 
         outer.addWidget(grp)
+        outer.addWidget(self._build_parts_group())
         outer.addStretch()
         return page
+
+    def _build_parts_group(self) -> QGroupBox:
+        grp = QGroupBox("Pack Parts (multi-ini)")
+        set_tip(grp, "pack_parts")
+        layout = QVBoxLayout(grp)
+
+        self._lst_parts = QListWidget()
+        self._lst_parts.itemDoubleClicked.connect(self._on_edit_part)
+        layout.addWidget(self._lst_parts)
+
+        btn_row = QHBoxLayout()
+        self._btn_part_add = QPushButton("Add Part…")
+        self._btn_part_add.clicked.connect(self._on_add_part)
+        self._btn_part_edit = QPushButton("Edit Part…")
+        self._btn_part_edit.clicked.connect(self._on_edit_part)
+        self._btn_part_remove = QPushButton("Remove Part")
+        self._btn_part_remove.clicked.connect(self._on_remove_part)
+        self._btn_part_up = QPushButton("Move Up")
+        self._btn_part_up.clicked.connect(lambda: self._on_move_part(-1))
+        self._btn_part_down = QPushButton("Move Down")
+        self._btn_part_down.clicked.connect(lambda: self._on_move_part(1))
+        for btn in (self._btn_part_add, self._btn_part_edit, self._btn_part_remove,
+                    self._btn_part_up, self._btn_part_down):
+            btn_row.addWidget(btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        hint = QLabel(
+            "Declares each pack ini's own Pack ID / Title / ID Range / Filename. Assign\n"
+            "photos to a part from the Photos tab's \"Belongs to Part\" dropdown;\n"
+            "unassigned photos are auto-filled into each part's remaining capacity on export."
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self._refresh_parts_list()
+        return grp
+
+    def _refresh_parts_list(self) -> None:
+        self._lst_parts.clear()
+        titles = pack_parts.get_part_titles(self._pm.data)
+        for i, title in enumerate(titles):
+            part_id = pack_parts.get_part_id(self._pm.data, i)
+            id_range = pack_parts.get_part_id_range(self._pm.data, i) or "(none)"
+            filename = pack_parts.get_part_filename(self._pm.data, i)
+            self._lst_parts.addItem(f"{title}  —  id={part_id}  idrange={id_range}  file={filename}")
+
+    def _on_add_part(self) -> None:
+        dlg = _PartEditDialog(self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+        part_id, title, id_range, filename = dlg.values()
+        pack_parts.set_part(self._pm.data, pack_parts.get_part_count(self._pm.data),
+                            part_id, title, id_range, filename)
+        self._pm.mark_dirty()
+        self._refresh_parts_list()
+        self.parts_changed.emit()
+
+    def _on_edit_part(self) -> None:
+        row = self._lst_parts.currentRow()
+        if row < 0:
+            return
+        titles = pack_parts.get_part_titles(self._pm.data)
+        part_id = pack_parts.get_part_id(self._pm.data, row)
+        id_range = pack_parts.get_part_id_range(self._pm.data, row)
+        filename_parts = self._pm.data.get("filename_parts", [])
+        filename = filename_parts[row].strip() if row < len(filename_parts) else ""
+        dlg = _PartEditDialog(self, part_id, titles[row], id_range, filename)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+        new_id, new_title, new_range, new_filename = dlg.values()
+        old_title = titles[row]
+        pack_parts.set_part(self._pm.data, row, new_id, new_title, new_range, new_filename)
+        if old_title != new_title:
+            for photo in self._pm.data.get("photos", []):
+                if photo.get("part_title") == old_title:
+                    photo["part_title"] = new_title
+        self._pm.mark_dirty()
+        self._refresh_parts_list()
+        self.parts_changed.emit()
+
+    def _on_remove_part(self) -> None:
+        row = self._lst_parts.currentRow()
+        if row < 0:
+            return
+        pack_parts.remove_part(self._pm.data, row)
+        self._pm.mark_dirty()
+        self._refresh_parts_list()
+        self.parts_changed.emit()
+
+    def _on_move_part(self, direction: int) -> None:
+        row = self._lst_parts.currentRow()
+        if row < 0:
+            return
+        pack_parts.move_part(self._pm.data, row, direction)
+        self._pm.mark_dirty()
+        self._refresh_parts_list()
+        self._lst_parts.setCurrentRow(row + direction)
+        self.parts_changed.emit()
 
     def _build_defaults_tab(self) -> QWidget:
         page = QWidget()
@@ -578,7 +710,8 @@ class PackInfoWidget(QWidget):
             return
 
         registry = load_registry(registry_path)
-        conflicts = find_conflicts(registry, game, pack_name, photo_ids)
+        conflicts = find_conflicts(registry, game, pack_name, photo_ids,
+                                    extra_pack_names=self._pm.data.get("id_parts", []))
         _dlog("PackInfoWidget._on_verify_photo_ids",
               f"{len(photo_ids)} photo IDs checked, {len(conflicts)} conflicts")
 
@@ -686,3 +819,4 @@ class PackInfoWidget(QWidget):
         self._on_theme_color_changed(theme_color_val)
         self._rebuild_traits()
         self._apply_game_visibility(game)
+        self._refresh_parts_list()

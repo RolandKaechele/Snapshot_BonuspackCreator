@@ -52,6 +52,15 @@ TIPS: dict[str, str] = {
         "Build/update the registry with:\n"
         "  tools\\scan_photo_registry.py --input <BonusContent folder>"
     ),
+    "pack_parts": (
+        "Declares each exported pack ini's own Pack ID / Title / ID Range / Filename for\n"
+        "multi-part packs (e.g. a pack split across pack1.ini, pack2.ini, ...).\n"
+        "Leave Filename blank to use \"<Part ID>.ini\"; set it to reuse an exact\n"
+        "existing filename (e.g. \"pack 1.ini\").\n"
+        "Assign a photo to a specific part from the Photos tab's \"Belongs to\n"
+        "Part\" dropdown; unassigned photos auto-fill each part's remaining\n"
+        "capacity (its ID Range width, or 100 photos) in order on export."
+    ),
 
     # ── Defaults section ─────────────────────────────────────────────────
     "defaults_position": (
@@ -128,6 +137,12 @@ TIPS: dict[str, str] = {
     ),
     "photo_add": "Add one or more image files to the photo list. Supported: .png .jpg .jpeg .dat .jpa .pna",
     "photo_remove": "Remove the currently selected photo from the list.",
+    "photo_part": (
+        "Which declared Pack Part (pack ini) this photo belongs to, if this is a\n"
+        "multi-part pack (see Pack Info > Identity > Pack Parts).\n"
+        "(Auto-assign) leaves it unset — export fills each part's remaining\n"
+        "capacity with unassigned photos in list order."
+    ),
 
     # ── Events tab ───────────────────────────────────────────────────────
     "event_type": (

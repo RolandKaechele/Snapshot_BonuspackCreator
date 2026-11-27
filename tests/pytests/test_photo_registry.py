@@ -179,3 +179,14 @@ def test_find_conflicts_no_overlap_returns_empty():
     photo_ids = [(200000, "newphoto")]
     conflicts = find_conflicts(registry, "snapshot", "newpack", photo_ids)
     assert conflicts == []
+
+
+def test_find_conflicts_ignores_extra_pack_names():
+    # Multi-part pack where one part's own id= doesn't follow the combined id's convention.
+    registry = {"entries": [
+        {"game_id": "snapshot", "pack_name": "oddpartname", "photo_id": 100100, "photo_name": "old"},
+    ]}
+    photo_ids = [(100100, "newphoto")]
+    conflicts = find_conflicts(registry, "snapshot", "mypack", photo_ids,
+                                extra_pack_names=["mypack1", "oddpartname"])
+    assert conflicts == []

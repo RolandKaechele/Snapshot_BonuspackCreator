@@ -185,4 +185,8 @@ Images are identified by content (byte sniffing), not by file extension.
 | `issue_correction`
 | `dict`
 | `{"position": str, "type": str, "color": str}` — corrected values entered in the *Flag as Wrong…* dialog. When `issue_flag` is set, export (`_write_pack_ini`) writes these values instead of the photo's original `position`/`type`/`color`
+
+| `part_title`
+| `str`
+| Pins this photo to a specific declared Pack Part for a multi-ini pack (Photos tab's *Belongs to Part* dropdown), matching one of the pack-level `title_parts` resolved titles (see `modules/pack_parts.py`). Absent/empty means "auto-assign at export time" — the photo fills the next declared part with spare capacity, or an auto-split overflow part
 |===

@@ -100,14 +100,18 @@ def merge_pack_entries(
 
 def find_conflicts(
     registry: dict[str, Any], game_id: str, pack_name: str, photo_ids: list[tuple[int, str]],
+    extra_pack_names: "list[str] | None" = None,
 ) -> list[dict[str, Any]]:
-    """Return registry entries whose ``photo_id`` collides with *photo_ids*, excluding *pack_name*."""
+    """Return registry entries whose ``photo_id`` collides with *photo_ids*, excluding *pack_name*.
+    *extra_pack_names* additionally excludes per-part ids of a multi-part pack (each part's own
+    ``id=`` may differ from the combined pack id), so a pack never conflicts with itself."""
     wanted_ids = {photo_id for photo_id, _name in photo_ids}
+    own_names = {pack_name} | set(extra_pack_names or [])
     conflicts = []
     for entry in registry.get("entries", []):
         if entry.get("game_id") != game_id:
             continue
-        if entry.get("pack_name") == pack_name:
+        if entry.get("pack_name") in own_names:
             continue
         if entry.get("photo_id") in wanted_ids:
             conflicts.append(entry)

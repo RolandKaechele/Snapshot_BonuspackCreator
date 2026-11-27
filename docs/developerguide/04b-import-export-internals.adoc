@@ -54,6 +54,8 @@ After reading all parts, `run_import` merges them:
 * `id` has trailing digits stripped (`"mypack1"` → `"mypack"`).
 * `title` has a trailing `" Part N"` suffix stripped, where `N` is either digits (`"Part 1"`) or a Roman numeral (`"Part I"`, `"Part III"`) — real packs use either form.
 * `id_range` is replaced with every part's range joined by `;` (e.g. `"105800-105899;105900-105999;125900-126199"`) instead of only part 1's — this is what the Pack Info tab's single ID Range field shows/edits, and what `photo_registry.parse_id_ranges()` / `compute_photo_ids()` understand (each `;`-separated segment is filled in order before moving to the next).
+* **Every photo is tagged with the `part_title` it was actually read from** (that part's raw, un-stripped title, captured into `title_parts` alongside the other per-part lists) — so the Photos tab's *Belongs to Part* dropdown reflects the import immediately instead of showing `(Auto-assign)` for everything, and a re-export reproduces the original per-part split (id/title/idrange/filename) via `modules.pack_parts.split_photos_by_declared_parts()` regardless of photo order or count changes elsewhere in the list.
+* **Each part's original ini filename is captured into `filename_parts`** (e.g. `"pack 1.ini"`) — a re-export of an unmodified import writes each part back to that exact filename instead of a renamed `"{part_id}.ini"`; editable afterward via the Identity tab's Parts editor.
 
 ==== Import-time validation
 
@@ -82,6 +84,8 @@ After the merged pack is loaded (`pm.data.update(pack_data)`) and views are refr
 ==== ini splitting (`_write_pack_ini`)
 
 Photos are normally chunked at 100 per file, producing a separate ini file per chunk (`pack.ini` for single-part, `{id}1.ini` / `{id}2.ini` … for multi-part).
+
+**Exception — explicit Pack Part assignment:** when any photo has a `part_title` key set (via the Photos tab's "Belongs to Part" dropdown, or the Pack Info > Identity > Parts editor), `modules.pack_parts.split_photos_by_declared_parts()` takes over entirely: photos pinned to a declared part go there; unassigned photos auto-fill each declared part's remaining capacity (its `idrange` width, or 100 when unparseable) in order; any further leftover photos spill into extra auto-numbered parts appended after the declared ones. Each declared part's own `id`/`title`/`idrange`/`filename` (`modules.pack_parts.get_part_id()`/`get_part_titles()`/`get_part_id_range()`/`get_part_filename()`) is written verbatim instead of the computed `{pack_id}{N}` / `"{title} Part N"` / `range_start + N*100` / `"{part_id}.ini"` defaults — `get_part_filename()` falls back to `"{part_id}.ini"` unless the part's `filename_parts` entry is set, letting a part reuse an exact existing filename (e.g. `"pack 1.ini"`). This check runs before the two exceptions below, so it takes priority whenever used; packs that never set `part_title` are completely unaffected.
 
 **Exception — wide-idrange preservation:** if the declared `idrange` already spans more than 100 IDs and is wide enough to cover every photo (`range_width > 100 and range_width >= photo_count`), the pack is kept as a **single** `pack.ini` with the original `idrange` written verbatim, instead of being force-split into 100-ID parts. This matches official packs that ship >100 photos under one wide range (e.g. `murderclub`: 104 photos under `idrange=200100-200299`).
 
@@ -143,8 +147,13 @@ The following keys in `pm.data` are owned by `import_export.py`:
 | `source_folder` | `str` | Absolute path of the imported pack folder; used by orphaned-files tab and export
 | `special_types_parts` | `list[list[str]]` | Per-part trait lists; only present after multi-ini import
 | `special_colors_parts` | `list[list[str]]` | Per-part color lists; only present after multi-ini import
+| `id_parts` | `list[str]` | Each part's own raw `id=`, in ini order; only present after multi-ini import. May differ from the combined, digit-stripped `id` (see `photo_registry.find_conflicts()`'s `extra_pack_names`)
+| `title_parts` | `list[str]` | Each part's own raw title (before `" Part N"` stripping) or a user-edited title from the Identity tab's Parts editor, in part order; falls back to `"Part N"` per `modules.pack_parts.get_part_titles()` when blank
 | `id_range_parts` | `list[str]` | Per-part `idrange` strings, in ini order; only present after multi-ini import
+| `filename_parts` | `list[str]` | Each part's original ini filename (e.g. `"pack 1.ini"`), captured on multi-ini import so re-export doesn't rename anything, and editable afterward via the Identity tab's Parts editor; falls back to `"{part_id}.ini"` per `modules.pack_parts.get_part_filename()` when blank
 | `photo_count_parts` | `list[int]` | Per-part photo counts, in ini order; only present after multi-ini import
 |===
 
 NOTE: After a multi-ini import, `id_range` itself becomes a `;`-joined string of every part's range (see above) rather than just part 1's. `modules/photo_registry.py`'s `parse_id_range()` still parses only the first segment (for single-range callers); `parse_id_ranges()` parses every segment, and `compute_photo_ids()` uses it to assign sequential IDs per segment, moving to the next range once the current one's width is filled.
+
+Each photo (`pm.data["photos"][i]`) may additionally carry a `part_title` key (`str`) — see `modules/pack_parts.py` — pinning it to one of `title_parts`' resolved titles; absent/empty means "auto-assign at export time" (see ini splitting above).

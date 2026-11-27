@@ -281,12 +281,20 @@ class PictureWidget(QWidget):
         set_tip(self._cmb_hypno_type, "photo_hypno_type")
         set_tip(self._lbl_hypno_type, "photo_hypno_type")
 
+        # Which declared Pack Part (multi-ini) this photo belongs to — hidden unless
+        # the pack has at least one declared part (see Pack Info > Identity > Parts).
+        self._lbl_part = QLabel("Belongs to Part:")
+        self._cmb_part = QComboBox()
+        set_tip(self._cmb_part, "photo_part")
+        set_tip(self._lbl_part, "photo_part")
+
         form.addRow("Position:", self._cmb_position)
         form.addRow("Type:", self._cmb_type)
         form.addRow(self._chk_overwrite_type, self._edit_overwrite_type)
         form.addRow("Color / Special:", self._cmb_color_special)
         form.addRow(self._chk_overwrite_color, self._edit_overwrite_color)
         form.addRow(self._lbl_hypno_type, self._cmb_hypno_type)
+        form.addRow(self._lbl_part, self._cmb_part)
         form.addRow("", self._chk_thumbnail)
 
         self._lbl_multi = QLabel("Thumbnail cannot be set for multiple images.")
@@ -306,6 +314,7 @@ class PictureWidget(QWidget):
         self._chk_overwrite_color.toggled.connect(self._on_trait_changed)
         self._edit_overwrite_color.textChanged.connect(self._on_trait_changed)
         self._chk_thumbnail.toggled.connect(self._on_trait_changed)
+        self._cmb_part.currentIndexChanged.connect(self._on_part_changed)
 
         right_layout.addWidget(detail_group, 1)
 
@@ -741,11 +750,61 @@ class PictureWidget(QWidget):
         self._cmb_hypno_type.setCurrentIndex(ht_idx if ht_idx >= 0 else 0)
         self._cmb_hypno_type.blockSignals(False)
 
+        self._populate_part_combo(photo.get("part_title", ""))
+
         self._cmb_position.blockSignals(False)
         self._cmb_type.blockSignals(False)
         self._cmb_color_special.blockSignals(False)
 
         self._on_position_changed()
+
+    def _populate_part_combo(self, current_part_title: str) -> None:
+        """Fill the "Belongs to Part" combo with the pack's declared part titles
+        (plus a leading "(Auto-assign)" option), hiding it entirely for single-ini
+        packs with no declared parts."""
+        from modules import pack_parts
+        titles = pack_parts.get_part_titles(self._pm.data)
+        has_parts = bool(titles)
+        self._lbl_part.setVisible(has_parts)
+        self._cmb_part.setVisible(has_parts)
+        if not has_parts:
+            return
+        self._cmb_part.blockSignals(True)
+        self._cmb_part.clear()
+        self._cmb_part.addItem("(Auto-assign)", "")
+        for title in titles:
+            self._cmb_part.addItem(title, title)
+        idx = self._cmb_part.findData(current_part_title) if current_part_title else 0
+        self._cmb_part.setCurrentIndex(idx if idx >= 0 else 0)
+        self._cmb_part.blockSignals(False)
+
+    def refresh_parts(self) -> None:
+        """Re-populate the "Belongs to Part" combo after the Identity tab's Parts
+        list changed, without disturbing the current photo list selection."""
+        selected = self._list.selectedItems()
+        if len(selected) == 1:
+            row = self._list.row(selected[0])
+            photos: list = self._pm.data.get("photos", [])
+            if 0 <= row < len(self._row_to_index) and self._row_to_index[row] < len(photos):
+                self._populate_part_combo(photos[self._row_to_index[row]].get("part_title", ""))
+                return
+        self._populate_part_combo("")
+
+    def _on_part_changed(self) -> None:
+        selected_rows = [
+            self._row_to_index[self._list.row(item)]
+            for item in self._list.selectedItems()
+            if 0 <= self._list.row(item) < len(self._row_to_index)
+        ]
+        photos: list = self._pm.data.get("photos", [])
+        part_title = self._cmb_part.currentData()
+        for row in selected_rows:
+            if row < 0 or row >= len(photos):
+                continue
+            if part_title:
+                photos[row]["part_title"] = part_title
+            else:
+                photos[row].pop("part_title", None)
 
     def _load_preview(self, path: str | None) -> None:
         self._preview_path = path or ""
@@ -853,7 +912,7 @@ class PictureWidget(QWidget):
         for w in (self._cmb_position, self._cmb_type, self._cmb_color_special,
                   self._chk_overwrite_type, self._edit_overwrite_type,
                   self._chk_overwrite_color, self._edit_overwrite_color,
-                  self._cmb_hypno_type):
+                  self._cmb_hypno_type, self._cmb_part):
             w.setEnabled(enabled)
         if not enabled:
             self._lbl_hypno_type.setVisible(False)
@@ -866,3 +925,4 @@ class PictureWidget(QWidget):
         self._set_detail_enabled(False)
         self._preview_label.setText("No image selected")
         self._preview_label.setPixmap(QPixmap())
+        self.refresh_parts()

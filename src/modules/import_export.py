@@ -82,12 +82,26 @@ class ImportExportManager:
             colors_parts = [list(pack_data.get("special_colors", []))]
             id_range_parts = [pack_data.get("id_range", "")]
             photo_count_parts = [len(pack_data.get("photos", []))]
+            # Each part keeps its own raw id= (may not follow the "<id><N>" convention,
+            # e.g. a part reusing an older standalone pack id) — tracked so ID-conflict
+            # checks can treat every part's own id as "self", not just the combined one.
+            id_parts = [pack_data.get("id", "")]
+            # Raw per-part title (before the combined " Part N" suffix is stripped below),
+            # prefilling the Identity tab's Parts editor with something more useful than "Part N".
+            title_parts = [pack_data.get("title", "").strip('"')]
+            # Original ini filename per part (e.g. "pack 1.ini") — reused verbatim on
+            # re-export so round-tripping an unmodified import doesn't rename anything;
+            # editable afterward via the Identity tab's Parts editor if desired.
+            filename_parts = [os.path.basename(ini_paths[0])]
             for extra_ini in ini_paths[1:]:
                 extra = _read_pack_ini(extra_ini, folder)
                 types_parts.append(list(extra.get("special_types",  [])))
                 colors_parts.append(list(extra.get("special_colors", [])))
                 id_range_parts.append(extra.get("id_range", ""))
                 photo_count_parts.append(len(extra.get("photos", [])))
+                id_parts.append(extra.get("id", ""))
+                title_parts.append(extra.get("title", "").strip('"'))
+                filename_parts.append(os.path.basename(extra_ini))
                 pack_data.setdefault("photos", []).extend(extra.get("photos", []))
                 # Merge per-part trait lists without duplicates
                 for key in ("special_types", "special_colors"):
@@ -107,6 +121,17 @@ class ImportExportManager:
                 pack_data["special_colors_parts"] = colors_parts
                 pack_data["id_range_parts"]    = id_range_parts
                 pack_data["photo_count_parts"] = photo_count_parts
+                pack_data["id_parts"] = id_parts
+                pack_data["title_parts"] = title_parts
+                pack_data["filename_parts"] = filename_parts
+                # Tag each photo with the part it was actually read from, so the Photos
+                # tab's "Belongs to Part" dropdown reflects the import and re-export
+                # reproduces the same per-part split without relying on photo order/counts.
+                start = 0
+                for part_idx, count in enumerate(photo_count_parts):
+                    for photo in pack_data["photos"][start:start + count]:
+                        photo["part_title"] = title_parts[part_idx]
+                    start += count
                 # Show/validate every part's range instead of only part 1's — the
                 # UI's single ID Range field would otherwise hide parts 2+ entirely.
                 pack_data["id_range"] = ";".join(r for r in id_range_parts if r)
@@ -651,31 +676,52 @@ def _write_pack_ini(pack_folder: str, data: dict) -> None:
         and sum(photo_count_parts) == total_photos
     )
 
-    if preserve_single_range:
+    # A photo explicitly pinned to a named Pack Part (Pack Info > Identity > Parts,
+    # or the Photos tab's "Belongs to Part" dropdown) overrides the positional
+    # auto-split entirely — the pack author decided exactly which ini each photo
+    # goes to. Photos left unassigned still auto-fill each declared part's
+    # remaining capacity, same spirit as "if not set, export will auto set them".
+    has_explicit_parts = any(p.get("part_title") for p in photos)
+
+    if has_explicit_parts:
+        from modules.pack_parts import split_photos_by_declared_parts
+        chunks, part_meta = split_photos_by_declared_parts(data, photos, pack_id, title, range_start)
+    elif preserve_single_range:
         chunks = [photos]
+        part_meta = None
     elif preserve_original_parts:
         chunks = []
         start = 0
         for count in photo_count_parts:
             chunks.append(photos[start:start + count])
             start += count
+        part_meta = None
     else:
         chunks = [photos[i:i + 100] for i in range(0, max(total_photos, 1), 100)]
+        part_meta = None
     multi = len(chunks) > 1
+
+    if part_meta is None:
+        part_meta = []
+        for part_idx in range(len(chunks)):
+            part_num = part_idx + 1
+            part_id = f"{pack_id}{part_num}" if multi else pack_id
+            part_title = f"{title} Part {part_num}" if multi else title
+            if preserve_single_range:
+                part_range = id_range
+            elif preserve_original_parts:
+                part_range = id_range_parts[part_idx] or id_range
+            elif range_start is not None:
+                part_start = range_start + part_idx * 100
+                part_range = f"{part_start}-{part_start + 99}"
+            else:
+                part_range = id_range
+            part_filename = f"{part_id}.ini" if multi else "pack.ini"
+            part_meta.append((part_id, part_title, part_range, part_filename))
 
     for part_idx, chunk in enumerate(chunks):
         part_num = part_idx + 1
-        part_id = f"{pack_id}{part_num}" if multi else pack_id
-        part_title = f"{title} Part {part_num}" if multi else title
-        if preserve_single_range:
-            part_range = id_range
-        elif preserve_original_parts:
-            part_range = id_range_parts[part_idx] or id_range
-        elif range_start is not None:
-            part_start = range_start + part_idx * 100
-            part_range = f"{part_start}-{part_start + 99}"
-        else:
-            part_range = id_range
+        part_id, part_title, part_range, part_filename = part_meta[part_idx]
 
         lines: list[str] = []
         if game == "lewdshores":
@@ -758,7 +804,6 @@ def _write_pack_ini(pack_folder: str, data: dict) -> None:
             def_type     = data.get("defaults_type", "plain")
             def_color    = data.get("defaults_color", "white")
             def_cat      = data.get("defaults_category", "")
-            def_special  = data.get("defaults_special", "")
             snap_def: list[str] = []
             if def_cat:
                 snap_def.append(f"category={def_cat}")
@@ -768,8 +813,9 @@ def _write_pack_ini(pack_folder: str, data: dict) -> None:
                 snap_def.append(f"type={def_type}")
             if data.get("defaults_color") is not None:
                 snap_def.append(f"color={def_color}")
-            if def_special:
-                snap_def.append(f"special={def_special}")
+            # `special=` under [Defaults] is a Lewd Shores-only key (see docs/Analysis.md);
+            # Snapshot!/Naughty Nightmares never use it, even if defaults_special was left
+            # over in pm.data from switching Game to Lewd Shores and back.
             if snap_def:
                 lines += ["[Defaults]"] + snap_def + [""]
 
@@ -848,8 +894,7 @@ def _write_pack_ini(pack_folder: str, data: dict) -> None:
                         lines.append(f"{n}.{out_key}={merged[key]}")
             lines.append("")
 
-        filename = f"{pack_id}{part_num}.ini" if multi else "pack.ini"
-        ini_path = os.path.join(pack_folder, filename)
+        ini_path = os.path.join(pack_folder, part_filename)
         with open(ini_path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 

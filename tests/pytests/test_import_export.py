@@ -543,6 +543,25 @@ def test_import_from_folder_strips_roman_numeral_part_suffix_and_captures_parts(
     assert len(data["photos"]) == 9
     # The single ID Range field must show every part, not just part 1's.
     assert data["id_range"] == "105800-105899;105900-105999;125900-126199"
+    # Every imported photo is tagged with the part it actually came from, so the
+    # Photos tab's "Belongs to Part" dropdown reflects reality instead of "(Auto-assign)".
+    assert data["title_parts"] == [
+        "Mihepos School's Out Part I", "Mihepos School's Out Part II", "Mihepos School's Out Part III",
+    ]
+    assert [p["part_title"] for p in data["photos"]] == (
+        [data["title_parts"][0]] * 3 + [data["title_parts"][1]] * 3 + [data["title_parts"][2]] * 3
+    )
+    # Each part's original filename is preserved too, so re-export doesn't rename anything.
+    assert data["filename_parts"] == ["pack 1.ini", "pack 2.ini", "pack 3.ini"]
+
+    # Re-exporting must reproduce each part's original id/title/idrange/filename
+    # verbatim, driven by the tagged part_title rather than recomputed 100-ID slots.
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _write_pack_ini(str(out_dir), data)
+    c3 = (out_dir / "pack 3.ini").read_text(encoding="utf-8")
+    assert "idrange=125900-126199" in c3
+    assert 'title="Mihepos School\'s Out Part III"' in c3
 
 
 # ── _export_photo_files ──────────────────────────────────────────────────────
@@ -667,6 +686,24 @@ def test_write_pack_ini_no_split_below_100(tmp_path):
     assert not (tmp_path / "small1.ini").exists()
 
 
+def test_write_pack_ini_snapshot_never_writes_defaults_special(tmp_path):
+    """'special=' under [Defaults] is Lewd Shores-only; a leftover defaults_special
+    value (e.g. from switching Game to Lewd Shores and back) must not leak into
+    a Snapshot!/Naughty Nightmares export."""
+    photos = [{"name": "p0", "position": "upskirt", "type": "plain",
+               "color": "white", "source": None}]
+    data = {
+        "game": "snapshot", "pack_type": "photos",
+        "id": "small", "id_range": "110000-110099", "title": "Small",
+        "special_category": "", "special_category_color": "#000000",
+        "photos": photos,
+        "defaults_special": "none",
+    }
+    _write_pack_ini(str(tmp_path), data)
+    content = (tmp_path / "pack.ini").read_text(encoding="utf-8")
+    assert "special=" not in content
+
+
 def test_write_pack_ini_preserves_original_part_idranges(tmp_path):
     """A disjoint, non-contiguous part-3 idrange must round-trip verbatim instead
     of being overwritten with a computed range_start + part_idx*100 slot."""
@@ -707,6 +744,54 @@ def test_write_pack_ini_falls_back_when_photo_counts_changed(tmp_path):
     }
     _write_pack_ini(str(tmp_path), data)
     assert (tmp_path / "pack.ini").exists()
+
+
+def test_write_pack_ini_explicit_part_assignment(tmp_path):
+    """A photo pinned to a named Pack Part (via Photos tab's dropdown / id_parts etc.)
+    is written to that part's ini, overriding the usual positional auto-split."""
+    photos = [
+        {"name": "a", "position": "upskirt", "type": "plain", "color": "white",
+         "source": None, "part_title": "Part Two"},
+        {"name": "b", "position": "upskirt", "type": "plain", "color": "white", "source": None},
+        {"name": "c", "position": "upskirt", "type": "plain", "color": "white", "source": None},
+    ]
+    data = {
+        "game": "snapshot", "pack_type": "photos",
+        "id": "mypack", "id_range": "100100-100101", "title": "My Pack",
+        "special_category": "", "special_category_color": "#000000",
+        "photos": photos,
+        "id_parts": ["mypack1", "mypack2"],
+        "title_parts": ["Part One", "Part Two"],
+        "id_range_parts": ["100100-100101", "100200-100201"],
+    }
+    _write_pack_ini(str(tmp_path), data)
+    c1 = (tmp_path / "mypack1.ini").read_text(encoding="utf-8")
+    c2 = (tmp_path / "mypack2.ini").read_text(encoding="utf-8")
+    assert "names=b,c" in c1
+    assert "names=a" in c2
+    assert 'title="Part Two"' in c2
+
+
+def test_write_pack_ini_uses_custom_part_filename(tmp_path):
+    """A part's custom Filename override (Pack Info > Identity > Parts editor) is
+    used verbatim for the exported ini instead of the default '<Part ID>.ini'."""
+    photos = [
+        {"name": "a", "position": "upskirt", "type": "plain", "color": "white",
+         "source": None, "part_title": "Part One"},
+    ]
+    data = {
+        "game": "snapshot", "pack_type": "photos",
+        "id": "mypack", "id_range": "100100-100101", "title": "My Pack",
+        "special_category": "", "special_category_color": "#000000",
+        "photos": photos,
+        "id_parts": ["mypack1"],
+        "title_parts": ["Part One"],
+        "id_range_parts": ["100100-100101"],
+        "filename_parts": ["pack 1.ini"],
+    }
+    _write_pack_ini(str(tmp_path), data)
+    assert (tmp_path / "pack 1.ini").exists()
+    assert not (tmp_path / "mypack1.ini").exists()
 
 
 # ── Special Traits and aliases ───────────────────────────────────────────────

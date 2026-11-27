@@ -233,7 +233,8 @@ def detect_id_conflicts(pack_data: dict) -> tuple[list[dict], bool]:
         return [], registry_available
 
     registry = load_registry(registry_path)
-    raw_conflicts = find_conflicts(registry, game, pack_name, photo_ids)
+    raw_conflicts = find_conflicts(registry, game, pack_name, photo_ids,
+                                    extra_pack_names=pack_data.get("id_parts", []))
     conflicts = [
         {
             "photo_id": c["photo_id"],
