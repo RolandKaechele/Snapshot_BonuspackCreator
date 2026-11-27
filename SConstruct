@@ -65,6 +65,10 @@ else:
     print(f"ERROR: torch={_torch_arg!r} unknown. Valid choices: {', '.join(TORCH_VARIANTS)}, all")
     Exit(1)  # type: ignore[name-defined]
 
+# Modules excluded from the frozen bundle -- installed into _internal on first
+# app start instead by modules/torch_installer.py (see docs/TorchBundle_Analysis.md).
+TORCH_EXCLUDE_MODULES = ["torch", "torchvision", "torchaudio", "nvidia", "triton", "functorch", "caffe2"]
+
 # -- Configuration -------------------------------------------------------------
 APP_NAME    = "SnapshotPackCreator"
 ENTRY_POINT = os.path.join("src", "main.py")
@@ -219,6 +223,26 @@ def _run_pyinstaller(target, source, env):
         "--noconfirm",
         "--paths",    "src",
     ]
+
+    # torch/torchvision (~3.5 GB with CUDA wheels) are deliberately excluded from
+    # the frozen bundle -- modules/torch_installer.py installs them into _internal
+    # on first app start instead (see docs/TorchBundle_Analysis.md).
+    for _excluded in TORCH_EXCLUDE_MODULES:
+        cmd += ["--exclude-module", _excluded]
+
+    # torch is excluded above, so its deep, conditionally-imported stdlib deps
+    # (timeit, unittest.mock, ...) are never auto-discovered and end up missing
+    # from base_library.zip. modules/torch_installer.ensure_stdlib_complete()
+    # mirrors the full portable-Python stdlib into _internal/ at app startup
+    # instead of hidden-import-ing modules one at a time here.
+
+    # plugins/ is loose and never scanned by PyInstaller's Analysis (see below),
+    # so a src/modules/ or src/ui/ helper only ever imported by a plugin (e.g.
+    # modules.compel_compat, used only by anylora_diffusion) is never discovered
+    # and silently missing from the frozen bundle. Force-collect every submodule
+    # of our own first-party packages so this can't recur for future plugins.
+    cmd += ["--collect-submodules", "modules"]
+    cmd += ["--collect-submodules", "ui"]
 
     if os.path.isfile(ICON_PATH):
         cmd += ["--icon", ICON_PATH]

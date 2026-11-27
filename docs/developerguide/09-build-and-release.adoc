@@ -55,6 +55,8 @@ venv\Scripts\python.exe -m scons torch=cpu
 venv\Scripts\python.exe -m scons torch=all
 ----
 
+NOTE: torch/torchvision are *not* bundled into the frozen app despite the `torch=` variant selection above — `TORCH_EXCLUDE_MODULES` in `SConstruct` passes `--exclude-module` flags to PyInstaller for `torch`, `torchvision`, `torchaudio`, `nvidia`, `triton`, `functorch`, and `caffe2`, since `plugin_system.py`'s lazy `import torch` would otherwise cause PyInstaller to bundle the ~3.5 GB CUDA wheels. The `torch=` variant only controls which wheel is installed into the *build venv* (used when running from source/tests). The frozen app installs torch itself on first start instead — see <<torch-first-run-install,torch First-Run Install>> in `04-architecture.adoc`.
+
 `scons` alone only builds the main app SFX installer — it does *not* build the per-plugin SFX installers (see <<plugin-sfx-builds>>), since repacking every bundled plugin's model files on each run made plain app builds much slower than necessary.
 
 To clean all build artefacts:

@@ -44,3 +44,4 @@ pytest_out.txt
 
 # plugins 
 plugins/
+debug.log

@@ -28,6 +28,7 @@ snapshot_pack_creator_V1_9/
 │   │   ├── main_window.py
 │   │   ├── menubar.py
 │   │   ├── statusbar.py
+│   │   ├── torch_install_dialog.py  ← first-run torch install progress dialog (NEW)
 │   │   └── style.qss
 │   └── modules/
 │       ├── pack_manager.py
@@ -57,6 +58,7 @@ snapshot_pack_creator_V1_9/
 │       ├── position_rules.py    ← Position values reserved for a Pack Type (NEW)
 │       ├── issue_report.py      ← Flag-as-Wrong dialog + Issue Report generation (NEW)
 │       ├── photo_registry.py    ← cross-pack photo ID registry (src/registry.json) (NEW)
+│       ├── torch_installer.py   ← first-run torch install into frozen _internal/ (NEW)
 │       └── plugin_system.py
 ├── tests/
 ├── temp/                 ← portable Python runtime (never committed)

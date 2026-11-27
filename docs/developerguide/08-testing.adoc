@@ -32,6 +32,9 @@ Use `tmp_path` for any test that reads or writes files.
 | `test_plugin_system.py`
 | Plugin discovery, loading, error isolation
 
+| `test_torch_installer.py`
+| `torch_installer` — frozen-app path resolution, `is_torch_installed`, GPU-based `detect_torch_index_url` (mocked `subprocess.run`)
+
 | `test_statusbar.py`
 | `StatusbarController` methods via `MagicMock`
 

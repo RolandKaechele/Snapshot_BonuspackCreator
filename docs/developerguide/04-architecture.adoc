@@ -52,6 +52,20 @@ Likewise, `Tools → Open Asset Folder…` (`MainWindow.on_open_asset_folder()`)
 === Plugin Hardware Gating
 
 `load_plugins()` now always imports every discovered module (regardless of its disabled state) so `PluginManagerDialog` can show accurate version/description/hardware status for all of them — safe because plugins only do heavy imports (torch, diffusers, …) lazily inside functions, never at module scope.
+
+[[torch-first-run-install]]
+==== torch First-Run Install
+
+torch/torchvision (~3.5 GB with CUDA wheels) are excluded from the PyInstaller freeze (`TORCH_EXCLUDE_MODULES` in `SConstruct`, passed as `--exclude-module` flags) even though `plugin_system.py`'s lazy `import torch` would otherwise make PyInstaller bundle them. Instead, `main.py` checks `modules.torch_installer.is_torch_installed()` on every frozen-app start; if torch is missing it shows `ui.torch_install_dialog.TorchInstallDialog`, which runs `TorchInstallWorker` to `pip install --target _internal torch torchvision` using the already-bundled `tools/python/python.exe` (the same portable runtime used for plugin dependency installs — see <<plugin-sfx-builds>>). GPU detection (`detect_torch_index_url()`) mirrors `cli.bat`'s `nvidia-smi`/CIM logic to pick the `cu128` vs `cpu` wheel index. If the user skips the install or it fails, the app still starts normally — AI features simply stay unavailable, same as when no diffusion backend plugin is installed. See `docs/TorchBundle_Analysis.md` for the full analysis.
+
+Because torch itself is excluded from PyInstaller's `Analysis`, its own deep, conditionally-imported stdlib dependencies (e.g. `timeit`, `unittest.mock`, `ctypes.wintypes`, `pickletools`) are never auto-discovered either, so `base_library.zip` ends up missing them — `import torch` then fails deep inside with a `ModuleNotFoundError`/`ImportError` for one stdlib module at a time, only inside the frozen process. `main.py` calls `modules.torch_installer.ensure_stdlib_complete()` on every frozen start (regardless of whether torch was just installed or already present) to mirror any top-level entry from the bundled portable Python's `tools/python/Lib/` into `_internal/` that isn't already there, rather than hidden-import-ing individual stdlib modules in `SConstruct`.
+
+[[plugin-deps-auto-install]]
+==== Plugin Dependency Auto-Install
+
+`main.py` also calls `modules.plugin_deps.missing_requirements()` on every start, which scans each discovered plugin folder under `plugins/` for a `requirements.txt`, parses it with `packaging.requirements.Requirement`, and compares each entry against `importlib.metadata` to build a de-duplicated list of unsatisfied packages across *all* plugins. When that list is non-empty, `ui.plugin_deps_install_dialog.PluginDepsInstallDialog` runs `PluginDepsInstallWorker` to `pip install` them in one call, reusing the exact same target (`--target _internal` when frozen, the active venv otherwise) and portable-Python-vs-`sys.executable` selection as the torch installer above. This removes the need for users to run `install_plugin_deps.bat` manually after dropping a plugin into `plugins/` in the common case — it still exists as a manual fallback (e.g. for air-gapped installs done ahead of time). A failed or skipped install does not block app start; `PluginSystem.load_plugins()` simply skips whichever plugin's import still fails, same as today. See `docs/PluginAutoInstallDeps_Analysis.md` for the full analysis.
+
+IMPORTANT: because the install happens via a subprocess launched *from within the already-running* frozen process (unlike plugin dependency installs via `install_plugin_deps.bat`, which always happen in a separate run before the app is next launched), simply continuing in the same process after a successful install proved unreliable — `importlib.invalidate_caches()` fixes plain Python import resolution, but torch's native extensions/DLL search paths and other C-level one-time process state aren't guaranteed to pick up files that didn't exist yet when the process started. `main.py` therefore calls `_restart_app()` (relaunches via `subprocess.Popen([sys.executable] + sys.argv[...])`, then `sys.exit(0)`) whenever `TorchInstallDialog.success` or `PluginDepsInstallDialog.success` is `True`, so the actual import of anything just installed always happens in a brand-new process. A skipped or failed install does *not* restart — the app continues in the current process with that feature simply unavailable.
 A plugin opts into a hardware check by declaring a module-level `MIN_VRAM_GB` constant (see `plugins/moss_image/__init__.py`, which needs ≈ 12 GB).
 `PluginSystem.hardware_status(name)` compares it against the primary CUDA GPU's VRAM (`torch.cuda.get_device_properties(0).total_memory`) and returns `""` when satisfied, or a short reason otherwise.
 `load_plugins()` skips calling `register()` for any plugin that fails this check, same as a user-disabled one; `PluginManagerDialog` shows its row as *Unsupported Hardware* with the checkbox greyed out, forced unchecked, and a tooltip with the reason, so it can't be re-enabled on that machine.
@@ -160,4 +174,10 @@ A plugin opts into a hardware check by declaring a module-level `MIN_VRAM_GB` co
 
 | `modules/plugin_system.py`
 | `PluginSystem` — discovers and imports plugins from `plugins/`; `load_disabled_plugins()`/`save_disabled_plugins()` read/write `src/plugin_config.json`; `discovered_plugin_names()` lists all found modules regardless of load/disabled state
+
+| `modules/torch_installer.py`
+| `is_frozen()`/`is_torch_installed()`/`detect_torch_index_url()`/`TorchInstallWorker` (`QThread`) — installs torch+torchvision into the frozen app's `_internal/` on first start, using the bundled `tools/python/` runtime (see <<torch-first-run-install>>)
+
+| `ui/torch_install_dialog.py`
+| `TorchInstallDialog` — modal progress dialog shown by `main.py` on first frozen-app start when torch is missing from `_internal/`
 |===

@@ -38,7 +38,7 @@ Then build:
 venv\Scripts\python.exe -m scons
 ```
 
-Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_cu128_installer.exe`. The frozen app bundles CUDA 12.8 torch and falls back to CPU automatically at runtime when no NVIDIA GPU is present, so a separate CPU-only build is not needed (`scons torch=cpu` remains available if one is ever wanted).
+Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_cu128_installer.exe`. torch/torchvision are *not* bundled into the frozen app (kept out of the PyInstaller freeze to avoid shipping the ~3.5 GB CUDA wheels) — instead, `modules/torch_installer.py` installs them into `_internal/` automatically on first launch, detecting an NVIDIA GPU and picking the matching CUDA build, or falling back to CPU-only otherwise (`scons torch=cpu`/`torch=all` only controls which wheel is installed into the *build venv* used for running from source/tests). See `docs/developerguide/04-architecture.adoc` ("torch First-Run Install") for details.
 
 ## Features
 
@@ -61,7 +61,7 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_cu128_installer.exe`. The frozen 
   - When a pack has more `rare`-colored photos than the game allows (`ceil(photo count / 10)`, Snapshot! and Naughty Nightmares Photos packs only), every photo marked `rare` is shown with a ⚠ icon and a tooltip explaining the cap, matching the Issue Report's "Rare Photo Cap Exceeded" list
   - A *Filter* box above the list narrows it down by filename, position, type, or color (case-insensitive substring match)
   - A *Preprocess…* button resizes/recompresses selected photos (or all, if none selected) on disk via Pillow, given a max width/height and JPEG/PNG quality
-  - **AI Generate** *(optional plugin, not bundled — install separately)* — generate images via a text-to-image API; choose a position and an optional photo type (plain, kinky, nude, …), enter a character prompt, and pick from the generated results; *(any)* photo-type iterates all modifier types automatically; generated images are tagged with position and type automatically; only user-selected images are copied to the pack folder
+  - **AI Generate** *(optional plugin, not bundled — install separately)* — generate images via a text-to-image API; choose a position and an optional photo type (plain, kinky, nude, …), enter a character prompt, and pick from the generated results; *(any)* photo-type iterates all modifier types automatically; generated images are tagged with position and type automatically; only user-selected images are copied to the pack folder; local diffusion plugins need PyTorch, which the frozen app installs automatically on first launch (see "First launch" below)
   - Game image formats `.dat`, `.jpa`, `.pna` (renamed JPEG/PNG) are previewed and imported correctly via content sniffing; `.byte` files (renamed MP4) are detected by magic bytes and shown in an inline video player widget
 - Overwrite Texts — key/value editor for the `[Hypnosis Text]` dialogue section; each entry has a paired *Speaker* field (`key.tag=`, empty for narration) with sensible defaults (e.g. `hypno_start_mod.4` → `Woman`)
 - City/Beach Events tab (Snapshot!, Naughty Nightmares, and Lewd Shores; Pack Type = Events only) — tab label and Pack Type entry switch to *Beach Events* for Lewd Shores; Backgrounds and Overlays with live image/video preview, reorder buttons, and a 3-pane Dialog editor (scene list / node list / node form)
@@ -76,6 +76,8 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_cu128_installer.exe`. The frozen 
 - **Warnings tab** — shows a *Pack Warnings* list (photos flagged as wrong, Position/Pack Type mismatches, ID Range Too Small, photo ID registry conflicts, and Rare Photo Cap Exceeded, with every affected photo listed in the tooltip) plus assets on disk that are not referenced by the pack (orphaned) and references in the ini that point to missing files (broken); for Events-type packs, broken references also include `mod_overlayImage1`/`mod_overlayImage2`/`mod_overlayImage3` and audio commands (`playSound`, `playSoundDelayed`, `stopLoopedSound`) referenced inside dialog scenes that resolve to neither a pack asset nor a builtin game asset; image preview for orphaned files; JSON dialog file preview (pretty-printed); delete orphaned files from disk; tab is hidden automatically when there is nothing to show (these checks used to pop up as a dialog on import — they now live here instead)
 - Plugin system — drop Python packages into `plugins/` to extend the application
   - **Manage Plugins…** (Tools menu) shows every discovered plugin in a table (Enabled checkbox / Name / Version / Status / Description); unchecking a plugin disables it, persisted to `plugin_config.json` and skipped on the next restart; plugins declaring a module-level `MIN_VRAM_GB` (e.g. `moss_image`, which needs ≈ 12 GB) show *Unsupported Hardware* with the checkbox greyed out when the detected GPU's VRAM is below it
+  - Missing plugin dependencies (each plugin's `requirements.txt`) are installed automatically on app start, with a progress dialog shown only when something needs installing; `install_plugin_deps.bat` remains available as a manual fallback (e.g. offline installs)
+- **First launch (frozen app)** — PyTorch is installed automatically on first start (progress dialog, NVIDIA GPU auto-detected for the matching CUDA build, otherwise CPU-only); if skipped or it fails the app still starts normally, only AI Generate features stay unavailable until it succeeds (relaunch to retry)
 - **Undo / Redo** (Edit menu, Ctrl+Z / Ctrl+Y) — a periodic snapshot timer captures the in-memory pack state so edits across Photos, Events, Love Lens, and the Dialog Graph can be undone/redone within the session
 - **Auto-backup** — every *Save* also writes a timestamped copy to a `.backups/` folder beside the pack file (keeps the last 10); *File → Restore Previous Version…* lists them and restores one
 - **Recent packs** — *File → Open Recent* remembers the last 10 opened/saved pack JSON files
@@ -108,6 +110,8 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_cu128_installer.exe`. The frozen 
 │   │   ├── menubar.py          Menubar builder
 │   │   ├── statusbar.py        Statusbar controller
 │   │   ├── image_viewer.py     Zoomable image viewer dialog; attach_viewer() helper
+│   │   ├── torch_install_dialog.py       First-run torch install progress dialog
+│   │   ├── plugin_deps_install_dialog.py Plugin dependency auto-install progress dialog
 │   │   └── style.qss           Application stylesheet (Catppuccin Mocha)
 │   └── modules/
 |       ├── pack_manager.py     Load / Save pack JSON; dirty tracking (`is_dirty`); undo/redo (`push_history`/`undo`/`redo`); timestamped `.backups/` on save
@@ -133,7 +137,9 @@ Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_cu128_installer.exe`. The frozen 
 │       ├── position_rules.py   Position values reserved for a specific Pack Type
 │       ├── issue_report.py     Flag-as-Wrong dialog + Issue Report generation
 │       ├── plugin_system.py    Plugin discovery and loader; disabled-plugin persistence
-│       └── plugin_dialog.py    Manage Plugins enable/disable dialog
+│       ├── plugin_dialog.py    Manage Plugins enable/disable dialog
+│       ├── torch_installer.py  First-run torch install into frozen _internal/; mirrors missing stdlib modules torch needs
+│       └── plugin_deps.py      Scans plugin requirements.txt files and auto-installs missing packages
 ├── SConstruct                  SCons build script (freeze + docs → PDF + SFX installer)
 ├── LICENSE                     MIT license
 ├── tests/                      pytest test suite

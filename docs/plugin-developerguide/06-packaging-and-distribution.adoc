@@ -20,7 +20,8 @@ plugins\
 If your plugin requires third-party packages:
 
 . List them in a `requirements.txt` inside your plugin folder.
-. Document in your README that the user must install them. How depends on whether they're running from a source checkout or a frozen install:
+. In most cases nothing further is needed — on every app start, `modules.plugin_deps.missing_requirements()` scans every plugin's `requirements.txt` and, if anything listed isn't already installed, automatically installs it before plugins are loaded (a progress dialog is shown only when there's something to install). See <<plugin-deps-auto-install,Plugin Dependency Auto-Install>> in the developer guide.
+. If the auto-install is skipped or fails (e.g. offline), you or your users can still install manually. How depends on whether they're running from a source checkout or a frozen install:
 
 [source,bat]
 ----
@@ -31,7 +32,7 @@ rem Frozen install — use the bundled helper (no separate Python needed)
 install_plugin_deps.bat plugins\my_awesome_plugin\requirements.txt
 ----
 
-`install_plugin_deps.bat` ships next to `SnapshotPackCreator.exe` in every frozen build; it runs the bundled `tools\python\python.exe` (the exact Python 3.12 build used to freeze the app) to `pip install --target` the packages straight into `_internal\`, so only pure-Python packages or `cp312-win_amd64` wheels are safe to list.
+Both the automatic install and `install_plugin_deps.bat` run the bundled `tools\python\python.exe` (the exact Python 3.12 build used to freeze the app) to `pip install --target` the packages straight into `_internal\`, so only pure-Python packages or `cp312-win_amd64` wheels are safe to list.
 
 Do not assume any package is available beyond what is already listed in the application's root `requirements.txt` (`PyQt6`, `Pillow`).
 

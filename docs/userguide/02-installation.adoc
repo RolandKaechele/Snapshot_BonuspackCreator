@@ -49,4 +49,19 @@ To enable debug logging in a frozen build, launch it from a command prompt with 
 SnapshotPackCreator.exe --debug
 ----
 
+=== First Launch of the Frozen App: PyTorch Setup
+
+To keep the installer download small, PyTorch (used by local AI diffusion
+plugins, ~2-3 GB) is *not* bundled — it is installed automatically the first
+time you launch `SnapshotPackCreator.exe`. A progress dialog shows the
+download; an NVIDIA GPU is detected automatically and the matching CUDA
+build is installed, otherwise a CPU-only build is used.
+
+This requires an internet connection on first launch. If it fails or you
+click *Skip*, the app still starts normally — only the *AI Generate…*
+buttons remain unavailable until PyTorch is installed (relaunch the app to
+retry). After a successful install (or missing plugin dependency install),
+the app automatically restarts itself once so the newly installed packages
+load cleanly.
+
 NOTE: Everywhere else in this guide, paths like `plugins\` or the assets folder are relative to `src\` in a source checkout, or relative to `SnapshotPackCreator.exe` in a frozen install — *Tools → Manage Plugins…* and *Tools → Open Asset Folder…* always open the correct one for however you're running the app.
