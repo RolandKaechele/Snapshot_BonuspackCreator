@@ -24,3 +24,7 @@ applyTo: "docs/**"
 
 - `docs/userguide.adoc` — end-user instructions: installing, running, using every feature.
 - `docs/developerguide.adoc` — architecture, module map, plugin API, adding new features, build and release process.
+
+## Forbidden Terminology
+
+- **Never use the word "decompiled"/"decompile"/"decompiler"/"decompilation" in any documentation file.** Use "reverse-engineered"/"reverse-engineer"/"reverse-engineering tool"/"reverse-engineering" instead. This also applies to commit messages (see `shell-and-vcs.instructions.md`).

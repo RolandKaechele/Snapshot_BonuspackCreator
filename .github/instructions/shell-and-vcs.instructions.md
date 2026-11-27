@@ -17,6 +17,7 @@ applyTo: "**"
 ## Version Control
 
 - This project is tracked in **both** Git and SVN (dual working copy — `.git` and `.svn` both present at the workspace root). Keep both in sync for every change.
+- **Never use the word "decompiled"/"decompile"/"decompiler" in a commit message** — use "reverse-engineered"/"reverse-engineer" instead (see `documentation.instructions.md` for the same rule applied to docs).
 - **Never commit** the `venv/`, `temp/`, or `.pycache/` directories.
 - **Renaming/moving any file (source, docs, or test files) must use `svn move`/`svn rename` and `git mv`/`git add -A` — never a plain OS delete+create (e.g. `create_file` + delete) or `Move-Item` alone.** Plain renames lose each tool's history tracking.
   - Since this is a single working copy mirrored by both VCS, you cannot run `git mv` and `svn move` back-to-back on the same path (the second one will fail, since the file is already gone from its old location). Instead:
