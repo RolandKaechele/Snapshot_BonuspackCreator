@@ -27,7 +27,7 @@ Per `README.md` and `.github/instructions/environment.instructions.md`:
 
 ## 2. Run the Build
 
-- Execute `venv\Scripts\python.exe -m scons` via the terminal tool.
+- Execute `venv\Scripts\scons.exe` via the terminal tool.
 - Use `venv\Scripts\python.exe` exclusively; never bare `python`/`python3` (see environment instructions).
 
 ## 3. Check the Result

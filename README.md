@@ -35,7 +35,7 @@ venv\Scripts\pip install pyinstaller
 Then build:
 
 ```bat
-venv\Scripts\python.exe -m scons
+venv\Scripts\scons.exe
 ```
 
 Produces `dist/SnapshotPackCreator_vYYYY-MM-DD_cu128_installer.exe`. torch/torchvision are *not* bundled into the frozen app (kept out of the PyInstaller freeze to avoid shipping the ~3.5 GB CUDA wheels) — instead, `modules/torch_installer.py` installs them into `_internal/` automatically on first launch, detecting an NVIDIA GPU and picking the matching CUDA build, or falling back to CPU-only otherwise (`scons torch=cpu`/`torch=all` only controls which wheel is installed into the *build venv* used for running from source/tests). See `docs/developerguide/04-architecture.adoc` ("torch First-Run Install") for details.
