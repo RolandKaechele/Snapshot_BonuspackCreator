@@ -77,7 +77,9 @@ def register(app):
         get_device_info=lambda: "",      # optional string for the window title
         verify_dialog_cls=None,          # optional QDialog for interactive auth
         ref_gen_dialog_cls=None,         # optional QDialog for the "Generate
-                                          # reference…" helper (Perchance-style)
+                                          # reference…" helper, letting another
+                                          # backend borrow this one to produce
+                                          # an IP-Adapter character reference
     )
 ----
 
@@ -100,11 +102,11 @@ each reference plugin's `_get_local_device()` helper.
 
 When no backend plugin registers itself as available, the *AI Generate…*
 buttons in Photos, Love Lens, and City Events are hidden automatically.
-See `plugins/perchance_diffusion` (online, no dependencies),
-`plugins/anythingxl_diffusion` (local Stable Diffusion XL, requires model
-files + `diffusers`), and `plugins/anima_diffusion` (local Cosmos-Predict2/
+See `plugins/anythingxl_diffusion` (local Stable Diffusion XL, requires model
+files + `diffusers`) and `plugins/anima_diffusion` (local Cosmos-Predict2/
 Anima DiT model, `supports_guidance_scale=True`) for full reference
-implementations.
+implementations. An online backend (no local model/dependencies) should
+implement interactive session auth via `verify_dialog_cls` instead.
 
 === Declaring a Minimum VRAM Requirement
 

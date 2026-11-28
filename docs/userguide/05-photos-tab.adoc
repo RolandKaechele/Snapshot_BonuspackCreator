@@ -130,7 +130,7 @@ WARNING: This modifies the image files on disk in place and cannot be undone —
 
 === Generating Images with AI
 
-Click *AI Generate…* to open the AI image generator, which calls the https://perchance.org[perchance.org] text-to-image service (internet connection required).
+Click *AI Generate…* to open the AI image generator. Image generation requires an installable *backend plugin* — these are not included by default and must be dropped into the `plugins/` folder separately (see xref:../plugin-developerguide/plugin-developerguide.adoc[Plugin Developer Guide]). Backends can be online services or local Stable Diffusion-based models that run entirely offline on your own GPU. If more than one backend plugin is installed, a *Backend* selector lets you choose which one to use; with only one installed it is used automatically.
 
 ==== Dialog Controls
 
@@ -163,27 +163,11 @@ Click *AI Generate…* to open the AI image generator, which calls the https://p
   If Photo Type is *(any)*, generates n images for every position × modifier combination.
 |===
 
-NOTE: Large runs (e.g. *(any)* × all positions) can take several minutes.
-A 1.5-second pause is inserted between requests to avoid rate-limiting, and the session is refreshed automatically if it expires mid-run.
+NOTE: Large runs (e.g. *(any)* × all positions) can take several minutes. Some online backends insert a short pause between requests to avoid rate-limiting and refresh their session automatically if it expires mid-run.
 
-==== Browser Verification (Cloudflare Turnstile)
+==== Browser Verification
 
-perchance.org uses Cloudflare Turnstile to block non-browser clients.
-The first time you generate images (or after a session expires), the app will:
-
-1. Open `https://image-generation.perchance.org/embed` in your default browser.
-2. Show a *Browser Verification* dialog with step-by-step instructions.
-
-In the browser:
-
-1. Press *F12* → click the *Console* tab.
-2. If Chrome warns about pasting, type `allow pasting` and press Enter first.
-3. Paste the command shown in the dialog and press Enter.
-4. Copy the result (starts with `{"uk":…`) back into the dialog's text box.
-5. Click *Verify*.
-
-The dialog stays open until you verify or cancel.
-Once verified, generation continues automatically.
+Some online backend plugins require a one-time browser-based verification step (e.g. to pass a bot challenge) before they can generate images, and again whenever the session expires. If the installed backend requires this, the app will show a *Browser Verification* dialog with step-by-step instructions specific to that backend; follow them, paste the requested value back into the dialog, and click *Verify*. The dialog stays open until you verify or cancel — once verified, generation continues automatically. Local offline backends do not require this step.
 
 ==== Picking Images
 

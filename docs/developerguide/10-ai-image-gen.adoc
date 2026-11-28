@@ -1,6 +1,14 @@
 == AI Image Generation (`src/modules/ai_image_gen.py`)
 
-The AI image generator integrates with the https://perchance.org[perchance.org] text-to-image API.
+`ai_image_gen.py` is a dialog host — it owns the prompt UI, position/modifier
+dictionaries, and image picker, but contains no image-generation code itself.
+Actual generation is delegated to one or more *diffusion backend plugins*
+registered via `register_diffusion_backend()` (see
+xref:../plugin-developerguide/03-plugin-api.adoc[Plugin API — Diffusion
+Backend Plugins]). No backend plugin ships with the application by default —
+users install one or more separately into `plugins/`.
+When more than one backend is installed and available, the dialog shows a
+*Backend* selector; with exactly one it is used silently.
 It is accessible from the Photos, Love Lens, and City Events tabs via an *AI Generate…* button.
 
 === Public Entry Point
@@ -53,46 +61,24 @@ open_ai_generate_dialog(
 
 Adding a new entry to any dict is the only change needed to expose a new position or type to users.
 
-=== Worker Thread
+=== Worker Thread Contract
 
-`_GenerationWorker(QThread)` accepts `list[tuple[str, str, str]]` — one `(prompt, pos_key, mod_key)` per request — and an `n_per_prompt` count.
+Each backend plugin's `worker_factory(prompts, n, output_dir, **kwargs)` must return a `QThread`
+accepting `list[tuple[str, str, str, str]]` — one `(prompt, pos_key, mod_key, negative_prompt_override)` per
+request — and an `n` (images-per-prompt) count.
 
-Signals:
+Required signals:
 
 * `progress(str)` — status message for the progress label
-* `image_ready(path, pos_key, mod_key)` — emitted after each successful download
+* `image_ready(path, pos_key, mod_key)` — emitted after each successful generation
 * `finished(list[tuple[str, str, str]])` — emitted when all prompts are done
 * `error(str)` — emitted on fatal exception
 
-The worker handles two failure modes transparently:
-
-* `invalid_key` → refreshes the perchance session and retries once
-* `IncompleteRead` / `TimeoutError` / `ConnectionResetError` → retries up to 4 times with exponential back-off
-
-A 1.5-second delay is inserted between requests to avoid rate-limiting.
-
-=== Session Handling and Cloudflare Turnstile
-
-`_get_session(opener)` returns `(ad_access_code, user_key)`.
-It visits the perchance embed page, extracts an ad access code, and calls `/api/verifyUser`.
-Sessions expire after a few minutes, which is why the worker refreshes on `invalid_key`.
-
-As of 2025, perchance.org uses Cloudflare Turnstile to block non-browser clients.
-`_do_get_session(opener)` wraps `_get_session` and catches `token_required` / `failed_verification` errors.
-When blocked it:
-
-1. Emits `session_required` on the worker (cross-thread signal).
-2. Blocks on a `threading.Event` for up to 180 seconds.
-3. Returns `(ad_access_code, user_key)` from the values provided by the main thread.
-
-The main thread connects `session_required` to `_on_session_required()`, which shows `_VerifySessionDialog`.
-
-==== _VerifySessionDialog
-
-Opens `https://image-generation.perchance.org/embed` in the system browser via `webbrowser.open()`.
-Shows step-by-step instructions for reading credentials from `localStorage` via DevTools Console.
-The user pastes the JSON result; `_on_verify()` parses `uk` and `ac` and calls `accept()`.
-Credentials flow back to the worker via `AiImageGenDialog._on_session_required` → `worker.set_session(user_key, ad_access_code)`.
+Backends may also expose an optional `session_required` signal plus a `set_session(...)`/`abort()`
+pair for interactive auth flows — `AiImageGenDialog._on_session_required()` connects to it automatically
+when present and shows the backend's `verify_dialog_cls`. Online backends needing a browser-based
+verification step (e.g. Cloudflare Turnstile) should implement this flow entirely inside their own
+plugin package and document it in their own `README.md`; none of this logic lives in `ai_image_gen.py`.
 
 === Image Picker Dialog
 
